@@ -47,9 +47,10 @@ bool gameOver = false;
 const int screenWidth = 1500;
 const int screenHeight = 1000;
 const float groundLevel = screenHeight - 0.3*screenHeight;
-const float friction = 0.21;
+const float friction = 0.29;
+const float drag = 0.04;
 
-void player_update(Player *player, float timestep) {
+void playerUpdate(Player *player, float timestep) {
 	bool movekeydown = false;
 	if(IsKeyDown(KEY_UP) && player->grounded) {
 		player->vel.y = PLAYER_JUMP;
@@ -73,7 +74,7 @@ void player_update(Player *player, float timestep) {
 
 	Vector2 accel = Vector2Scale(player->accel, timestep);
 	player->vel.x += accel.x - friction*player->vel.x;
-	player->vel.y += accel.y;
+	player->vel.y += accel.y - drag*player->vel.y;
 	accel = Vector2Scale(accel, timestep*0.5);
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
@@ -146,7 +147,7 @@ int main() {
 	while(!WindowShouldClose()) {
 
 		float timestep = GetFrameTime();
-		player_update(&mario, timestep*50);
+		playerUpdate(&mario, timestep*50);
 		//camera.target = (Vector2){ mario.pos.x + HALF_PLAYER_BOX_WIDTH, mario.pos.y + HALF_PLAYER_BOX_HEIGHT};
 
 		BeginDrawing();
