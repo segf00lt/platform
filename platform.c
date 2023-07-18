@@ -13,16 +13,24 @@
 #undef sprintf
 #define sprintf stbsp_sprintf
 #define SQUARE(x) (x*x)
-#define G (float)(7000.0)
-#define PLAYER_JUMP (float)(-2800.0)
-#define PLAYER_RUN  (float)(5000.0)
-#define PLAYER_BOX_WIDTH 15.0
-#define PLAYER_BOX_HEIGHT 30.0
-#define HALF_PLAYER_BOX_WIDTH 7.5
-#define HALF_PLAYER_BOX_HEIGHT 15
-#define PLAYER_INITIAL_Y (groundLevel-PLAYER_BOX_HEIGHT)
-#define PLAYER_INITIAL_X 100.0
-#define MAX_DEPTH (float)(1200.0)
+
+const int screenWidth = 1500;
+const int screenHeight = 1000;
+const float friction = 0.15;
+const float drag = 0.15;
+const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
+const float G = 500.0;
+const float PLAYER_JUMP = -2800.0;
+const float PLAYER_RUN = 5000.0;
+const float PLAYER_BOX_WIDTH = 15.0;
+const float PLAYER_BOX_HEIGHT = 30.0;
+const float HALF_PLAYER_BOX_WIDTH = 7.5;
+const float HALF_PLAYER_BOX_HEIGHT = 15;
+const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
+const float PLAYER_INITIAL_X = 100.0;
+const float PLAYER_MOVE_FORCE = 2e5;
+const float PLAYER_JUMP_FORCE = -3e5;
+const float MAX_DEPTH = 1200.0;
 
 typedef struct Player Player;
 //typedef struct Platform Platform;
@@ -32,6 +40,7 @@ struct Player {
 	Vector2 pos;
 	Vector2 vel;
 	Vector2 accel;
+	Vector2 force;
 	float width;
 	float height;
 	float mass;
@@ -44,27 +53,20 @@ Rectangle platforms[100];
 int platformCount = 4;
 bool gameOver = false;
 
-const int screenWidth = 1500;
-const int screenHeight = 1000;
-const float groundLevel = screenHeight - 0.3*screenHeight;
-const float friction = 0.15;
-const float drag = 0.08;
-
 void playerUpdate(Player *player, float timestep) {
-	bool movekeydown = false;
 	if(IsKeyDown(KEY_UP) && player->grounded) {
-		player->vel.y = PLAYER_JUMP;
+		player->force.y += PLAYER_JUMP_FORCE;
 		player->grounded = false;
 	}
 	if(IsKeyDown(KEY_LEFT)) {
-		movekeydown = true;
-		player->accel.x = -PLAYER_RUN;
+		player->force.x = -PLAYER_MOVE_FORCE;
+	} else if(IsKeyDown(KEY_RIGHT)) {
+		player->force.x = PLAYER_MOVE_FORCE;
+	} else {
+		player->force.x = 0;
 	}
-	if(IsKeyDown(KEY_RIGHT)) {
-		movekeydown = true;
-		player->accel.x = PLAYER_RUN;
-	}
-	player->accel.x *= movekeydown;
+
+	player->accel = Vector2Scale(player->force, player->invmass);
 
 	/*
 	 * 0.5*a*t^2 + v*t + p0
@@ -78,6 +80,7 @@ void playerUpdate(Player *player, float timestep) {
 	accel = Vector2Scale(accel, timestep*0.5);
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
+	player->force.y += G * player->mass;
 
 	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
@@ -88,6 +91,7 @@ void playerUpdate(Player *player, float timestep) {
 		   newpos.y + PLAYER_BOX_HEIGHT >= platform->y && player->pos.y <= platform->y &&
 		   player->vel.y >= 0)
 		{
+			player->force.y = 0;
 			player->vel.y = 0;
 			newpos.y -= newpos.y + PLAYER_BOX_HEIGHT - platform->y;
 			player->grounded = true;
@@ -109,6 +113,7 @@ int main() {
 		.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
 		.vel = {0},
 		.pos = { .x = PLAYER_INITIAL_X, .y = PLAYER_INITIAL_Y },
+		.force = { .x = 0, .y = 30 * G },
 		.accel = { .x = 0 , .y = G },
 		.mass = 30.0,
 		.invmass = 1/30.0,
@@ -117,22 +122,22 @@ int main() {
 	};
 
 	platforms[0] = (Rectangle){
-		.x = 0, .y = groundLevel,
-		.width = screenWidth, .height = screenHeight-groundLevel,
+		.x = 0, .y = GROUNDLEVEL,
+		.width = screenWidth, .height = screenHeight-GROUNDLEVEL,
 	};
 
 	platforms[1] = (Rectangle){
-		.x = 300, .y = groundLevel-120,
+		.x = 300, .y = GROUNDLEVEL-120,
 		.width = 400, .height = 40,
 	};
 
 	platforms[2] = (Rectangle){
-		.x = 1000, .y = groundLevel-120,
+		.x = 1000, .y = GROUNDLEVEL-120,
 		.width = 400, .height = 40,
 	};
 
 	platforms[3] = (Rectangle){
-		.x = 460, .y = groundLevel-300,
+		.x = 460, .y = GROUNDLEVEL-300,
 		.width = 200, .height = 30,
 	};
 
