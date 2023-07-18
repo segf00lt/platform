@@ -13,9 +13,9 @@
 #undef sprintf
 #define sprintf stbsp_sprintf
 #define SQUARE(x) (x*x)
-#define G (float)(2.0)
-#define PLAYER_JUMP (float)(-30.0)
-#define PLAYER_RUN  (float)(4.0)
+#define G (float)(7000.0)
+#define PLAYER_JUMP (float)(-2800.0)
+#define PLAYER_RUN  (float)(5000.0)
 #define PLAYER_BOX_WIDTH 15.0
 #define PLAYER_BOX_HEIGHT 30.0
 #define HALF_PLAYER_BOX_WIDTH 7.5
@@ -47,8 +47,8 @@ bool gameOver = false;
 const int screenWidth = 1500;
 const int screenHeight = 1000;
 const float groundLevel = screenHeight - 0.3*screenHeight;
-const float friction = 0.29;
-const float drag = 0.04;
+const float friction = 0.15;
+const float drag = 0.08;
 
 void playerUpdate(Player *player, float timestep) {
 	bool movekeydown = false;
@@ -79,6 +79,7 @@ void playerUpdate(Player *player, float timestep) {
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
 
+	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
 		Rectangle *platform = platforms+i;
 
@@ -136,19 +137,21 @@ int main() {
 	};
 
 	Camera2D camera = {0};
-	camera.target = (Vector2){ screenWidth/2.0f, screenHeight/2.0f };
-	camera.offset = (Vector2){ screenWidth/2.0f, screenHeight/2.0f };
 	camera.rotation = 0.0f;
-	camera.zoom = 0.8f;
+	camera.zoom = 1.5f;
+
+
+	const float fps = 60;
 
 	InitWindow(screenWidth, screenHeight, "platform");
-	SetTargetFPS(60);
+	SetTargetFPS(fps);
 
 	while(!WindowShouldClose()) {
 
 		float timestep = GetFrameTime();
-		playerUpdate(&mario, timestep*50);
-		//camera.target = (Vector2){ mario.pos.x + HALF_PLAYER_BOX_WIDTH, mario.pos.y + HALF_PLAYER_BOX_HEIGHT};
+		playerUpdate(&mario, timestep);
+		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
+		camera.target = (Vector2){ mario.pos.x + HALF_PLAYER_BOX_WIDTH, mario.pos.y+10};
 
 		BeginDrawing();
 
@@ -158,7 +161,8 @@ int main() {
 		{
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform)
 				DrawRectangleRec(*platform, RED);
-			DrawRectangle(mario.pos.x, mario.pos.y, mario.width, mario.height, mario.debugcolor);
+			Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
+			DrawRectangleRec(playerRect, mario.debugcolor);
 		}
 		EndMode2D();
 
