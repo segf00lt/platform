@@ -16,12 +16,12 @@
 
 const int screenWidth = 1500;
 const int screenHeight = 1000;
-const float friction = 0.15;
-const float drag = 0.15;
+const float friction = 10.20;
+const float drag = 1.00;
 const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
-const float G = 500.0;
-const float PLAYER_JUMP = -2800.0;
-const float PLAYER_RUN = 5000.0;
+const float G = 1000.0;
+const float PLAYER_JUMP = -1e10;
+const float PLAYER_RUN = 10.0;
 const float PLAYER_BOX_WIDTH = 15.0;
 const float PLAYER_BOX_HEIGHT = 30.0;
 const float HALF_PLAYER_BOX_WIDTH = 7.5;
@@ -30,6 +30,7 @@ const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
 const float PLAYER_INITIAL_X = 100.0;
 const float PLAYER_MOVE_FORCE = 2e5;
 const float PLAYER_JUMP_FORCE = -3e5;
+const int PLAYER_THRUST_TIME = 5;
 const float MAX_DEPTH = 1200.0;
 
 typedef struct Player Player;
@@ -46,7 +47,7 @@ struct Player {
 	float mass;
 	float invmass;
 	Color debugcolor;
-	bool grounded;
+	int thrust;
 };
 
 Rectangle platforms[100];
@@ -54,9 +55,11 @@ int platformCount = 4;
 bool gameOver = false;
 
 void playerUpdate(Player *player, float timestep) {
-	if(IsKeyDown(KEY_UP) && player->grounded) {
+	player->force.y = G * player->mass;
+
+	if(IsKeyDown(KEY_UP) && player->thrust > 0) {
 		player->force.y += PLAYER_JUMP_FORCE;
-		player->grounded = false;
+		--player->thrust;
 	}
 	if(IsKeyDown(KEY_LEFT)) {
 		player->force.x = -PLAYER_MOVE_FORCE;
@@ -75,34 +78,40 @@ void playerUpdate(Player *player, float timestep) {
 	 */
 
 	Vector2 accel = Vector2Scale(player->accel, timestep);
-	player->vel.x += accel.x - friction*player->vel.x;
-	player->vel.y += accel.y - drag*player->vel.y;
+	player->vel.x += accel.x - timestep*friction*player->vel.x;
+	player->vel.y += accel.y - timestep*drag*player->vel.y;
 	accel = Vector2Scale(accel, timestep*0.5);
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
-	player->force.y += G * player->mass;
 
+	bool colliding = false;
 	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
 		Rectangle *platform = platforms+i;
 
 		if(newpos.x + PLAYER_BOX_WIDTH*0.5 >= platform->x &&
 		   newpos.x + PLAYER_BOX_WIDTH*0.5 <= platform->x + platform->width &&
-		   newpos.y + PLAYER_BOX_HEIGHT >= platform->y && player->pos.y <= platform->y &&
+		   newpos.y + PLAYER_BOX_HEIGHT >= platform->y &&
+		   player->pos.y+player->height <= platform->y &&
 		   player->vel.y >= 0)
 		{
-			player->force.y = 0;
+			player->force.y = G * player->mass;
 			player->vel.y = 0;
 			newpos.y -= newpos.y + PLAYER_BOX_HEIGHT - platform->y;
-			player->grounded = true;
+			player->thrust = PLAYER_THRUST_TIME;
+			colliding = true;
 			break;
 		}
 	}
 
-	if(newpos.y >= MAX_DEPTH) {
-		newpos.x = PLAYER_INITIAL_X;
-		newpos.y = PLAYER_INITIAL_Y;
+	if(!colliding && player->thrust == PLAYER_THRUST_TIME) {
+		player->thrust = 0;
 	}
+
+	//if(newpos.y >= MAX_DEPTH) {
+	//	newpos.x = PLAYER_INITIAL_X;
+	//	newpos.y = PLAYER_INITIAL_Y;
+	//}
 	player->pos = newpos;
 }
 
@@ -118,12 +127,12 @@ int main() {
 		.mass = 30.0,
 		.invmass = 1/30.0,
 		.debugcolor = GREEN,
-		.grounded = true,
+		.thrust = PLAYER_THRUST_TIME,
 	};
 
 	platforms[0] = (Rectangle){
 		.x = 0, .y = GROUNDLEVEL,
-		.width = screenWidth, .height = screenHeight-GROUNDLEVEL,
+		.width = screenWidth*7000, .height = screenHeight-GROUNDLEVEL,
 	};
 
 	platforms[1] = (Rectangle){
@@ -172,9 +181,12 @@ int main() {
 		EndMode2D();
 
 		float fps = GetFPS();
-		char *fmt = "FPS: %f\nTIME: %f\nGROUNDED: %i\nVX: %f\nVY: %f\n";
+		char *fmt = "FPS: %f\nTIME: %f\nTHRUST: %i\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\n";
 		sprintf(buf, fmt,
-		fps, timestep, mario.grounded, mario.vel.x, mario.vel.y);
+		fps, timestep, mario.thrust,
+		mario.force.x, mario.force.y,
+		mario.accel.x, mario.accel.y,
+		mario.vel.x, mario.vel.y);
 
 		DrawText(buf, 10, 10, 15, RAYWHITE);
 
