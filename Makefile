@@ -1,4 +1,4 @@
-CFLAGS = -g -Wall -Wpedantic -Werror
+CFLAGS = -g -Wall -Wpedantic -Wunused-const-variable -Werror
 LDFLAGS = -lraylib -lm
 
 all:

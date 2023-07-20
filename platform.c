@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <raylib.h>
 #include <raymath.h>
+#include <assert.h>
 #include "stb_ds.h"
 #include "stb_sprintf.h"
 
@@ -20,18 +21,21 @@ const float friction = 10.20;
 const float drag = 1.00;
 const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
 const float G = 1000.0;
-const float PLAYER_JUMP = -1e10;
-const float PLAYER_RUN = 10.0;
-const float PLAYER_BOX_WIDTH = 15.0;
-const float PLAYER_BOX_HEIGHT = 30.0;
-const float HALF_PLAYER_BOX_WIDTH = 7.5;
-const float HALF_PLAYER_BOX_HEIGHT = 15;
-const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
+//const float PLAYER_BOX_WIDTH = 15.0;
+//const float PLAYER_BOX_HEIGHT = 30.0;
+//const float HALF_PLAYER_BOX_WIDTH = 7.5;
+//const float HALF_PLAYER_BOX_HEIGHT = 15;
+//const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
 const float PLAYER_INITIAL_X = 100.0;
-const float PLAYER_MOVE_FORCE = 2e5;
+const float PLAYER_MOVE_FORCE = 1.2e5;
 const float PLAYER_JUMP_FORCE = -3e5;
+const float PLAYER_MASS = 30;
+const float PLAYER_INVMASS = 1/PLAYER_MASS;
 const int PLAYER_THRUST_TIME = 5;
 const float MAX_DEPTH = 1200.0;
+const int PLAYER_FRAME_SPEED = 5;
+const float FPS = 60;
+
 
 typedef struct Player Player;
 //typedef struct Platform Platform;
@@ -42,11 +46,17 @@ struct Player {
 	Vector2 vel;
 	Vector2 accel;
 	Vector2 force;
+	Texture2D tex[3];
+	Rectangle frame;
+	int curFrame;
+	int frameCounter;
+	int frameSpeed;
 	float width;
 	float height;
 	float mass;
 	float invmass;
 	Color debugcolor;
+	int walking;
 	int thrust;
 };
 
@@ -59,14 +69,48 @@ void playerUpdate(Player *player, float timestep) {
 
 	if(IsKeyDown(KEY_UP) && player->thrust > 0) {
 		player->force.y += PLAYER_JUMP_FORCE;
+		//player->thrust = 0;
 		--player->thrust;
 	}
 	if(IsKeyDown(KEY_LEFT)) {
 		player->force.x = -PLAYER_MOVE_FORCE;
+		player->walking = 1;
 	} else if(IsKeyDown(KEY_RIGHT)) {
 		player->force.x = PLAYER_MOVE_FORCE;
+		player->walking = 1;
 	} else {
 		player->force.x = 0;
+		player->walking = 0;
+	}
+
+	if(player->thrust != PLAYER_THRUST_TIME) {
+		player->walking = 2;
+	}
+
+	if(player->walking == 1) {
+		++player->frameCounter;
+
+		if(player->frameCounter >= (FPS/player->frameSpeed)) {
+			player->frameCounter = 0;
+			++player->curFrame;
+			if(player->curFrame > 3)
+				player->curFrame = 0;
+			player->width = player->tex[1].width/3;
+			if(player->force.x < 0)
+				player->frame.width = -player->width;
+			else
+				player->frame.width = player->width;
+			player->frame.x = (float)player->curFrame*player->width;
+		}
+	} else {
+		player->curFrame = 0;
+		if(player->vel.x < 0) {
+			player->width = player->tex[player->walking].width;
+			player->frame.width = -player->width;
+		} else {
+			player->frame.width = player->width = player->tex[player->walking].width;
+		}
+		player->frame.x = (float)player->curFrame*player->width;
 	}
 
 	player->accel = Vector2Scale(player->force, player->invmass);
@@ -89,15 +133,15 @@ void playerUpdate(Player *player, float timestep) {
 	for(int i = 0; i < platformCount; ++i) {
 		Rectangle *platform = platforms+i;
 
-		if(newpos.x + PLAYER_BOX_WIDTH*0.5 >= platform->x &&
-		   newpos.x + PLAYER_BOX_WIDTH*0.5 <= platform->x + platform->width &&
-		   newpos.y + PLAYER_BOX_HEIGHT >= platform->y &&
+		if(newpos.x + player->width*0.5 >= platform->x &&
+		   newpos.x + player->width*0.5 <= platform->x + platform->width &&
+		   newpos.y + player->height >= platform->y &&
 		   player->pos.y+player->height <= platform->y &&
 		   player->vel.y >= 0)
 		{
 			player->force.y = G * player->mass;
 			player->vel.y = 0;
-			newpos.y -= newpos.y + PLAYER_BOX_HEIGHT - platform->y;
+			newpos.y -= newpos.y + player->height - platform->y;
 			player->thrust = PLAYER_THRUST_TIME;
 			colliding = true;
 			break;
@@ -110,22 +154,28 @@ void playerUpdate(Player *player, float timestep) {
 
 	//if(newpos.y >= MAX_DEPTH) {
 	//	newpos.x = PLAYER_INITIAL_X;
-	//	newpos.y = PLAYER_INITIAL_Y;
+	//	newpos.y = GROUNDLEVEL-player->height;
 	//}
 	player->pos = newpos;
 }
 
-int main() {
+int main(void) {
 	char buf[64];
 
+	InitWindow(screenWidth, screenHeight, "platform");
+	SetTargetFPS(FPS);
+
 	Player mario = {
-		.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
+		//.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
 		.vel = {0},
-		.pos = { .x = PLAYER_INITIAL_X, .y = PLAYER_INITIAL_Y },
+		.pos = { .x = PLAYER_INITIAL_X },
 		.force = { .x = 0, .y = 30 * G },
 		.accel = { .x = 0 , .y = G },
-		.mass = 30.0,
-		.invmass = 1/30.0,
+		.frameCounter = 0,
+		.curFrame = 0,
+		.frameSpeed = PLAYER_FRAME_SPEED,
+		.mass = PLAYER_MASS,
+		.invmass = PLAYER_INVMASS,
 		.debugcolor = GREEN,
 		.thrust = PLAYER_THRUST_TIME,
 	};
@@ -150,22 +200,23 @@ int main() {
 		.width = 200, .height = 30,
 	};
 
+	mario.tex[0] = LoadTexture("mario_still_scaled.png");
+	mario.tex[1] = LoadTexture("mario_anim_scaled.png");
+	mario.tex[2] = LoadTexture("mario_jump_scaled.png");
+	mario.frame.x = mario.frame.y = 0;
+	mario.frame.width = mario.width = mario.tex[0].width;
+	mario.frame.height = mario.height = mario.tex[0].height;
+	mario.pos.y = GROUNDLEVEL-mario.height;
 	Camera2D camera = {0};
 	camera.rotation = 0.0f;
 	camera.zoom = 1.5f;
-
-
-	const float fps = 60;
-
-	InitWindow(screenWidth, screenHeight, "platform");
-	SetTargetFPS(fps);
 
 	while(!WindowShouldClose()) {
 
 		float timestep = GetFrameTime();
 		playerUpdate(&mario, timestep);
 		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
-		camera.target = (Vector2){ mario.pos.x + HALF_PLAYER_BOX_WIDTH, mario.pos.y+10};
+		camera.target = (Vector2){ mario.pos.x + 15, mario.pos.y+15};
 
 		BeginDrawing();
 
@@ -175,15 +226,16 @@ int main() {
 		{
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform)
 				DrawRectangleRec(*platform, RED);
-			Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
-			DrawRectangleRec(playerRect, mario.debugcolor);
+			//Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
+			//DrawRectangleRec(playerRect, mario.debugcolor);
+			DrawTextureRec(mario.tex[mario.walking], mario.frame, mario.pos, WHITE);
 		}
 		EndMode2D();
 
-		float fps = GetFPS();
+		float FPS = GetFPS();
 		char *fmt = "FPS: %f\nTIME: %f\nTHRUST: %i\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\n";
 		sprintf(buf, fmt,
-		fps, timestep, mario.thrust,
+		FPS, timestep, mario.thrust,
 		mario.force.x, mario.force.y,
 		mario.accel.x, mario.accel.y,
 		mario.vel.x, mario.vel.y);
