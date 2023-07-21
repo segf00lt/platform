@@ -17,18 +17,18 @@
 
 const int screenWidth = 1500;
 const int screenHeight = 1000;
-const float friction = 10.20;
+const float friction = 9.20;
 const float drag = 1.00;
 const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
-const float G = 1000.0;
+const float G = 9000.0;
 //const float PLAYER_BOX_WIDTH = 15.0;
 //const float PLAYER_BOX_HEIGHT = 30.0;
 //const float HALF_PLAYER_BOX_WIDTH = 7.5;
 //const float HALF_PLAYER_BOX_HEIGHT = 15;
 //const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
 const float PLAYER_INITIAL_X = 100.0;
-const float PLAYER_MOVE_FORCE = 1.2e5;
-const float PLAYER_JUMP_FORCE = -3e5;
+const float PLAYER_MOVE_FORCE = 1.5e5;
+const float PLAYER_JUMP_FORCE = -1e6;
 const float PLAYER_MASS = 30;
 const float PLAYER_INVMASS = 1/PLAYER_MASS;
 const int PLAYER_THRUST_TIME = 5;
@@ -55,8 +55,7 @@ struct Player {
 	float height;
 	float mass;
 	float invmass;
-	Color debugcolor;
-	int walking;
+	int moveState;
 	int thrust;
 };
 
@@ -74,20 +73,20 @@ void playerUpdate(Player *player, float timestep) {
 	}
 	if(IsKeyDown(KEY_LEFT)) {
 		player->force.x = -PLAYER_MOVE_FORCE;
-		player->walking = 1;
+		player->moveState = 1;
 	} else if(IsKeyDown(KEY_RIGHT)) {
 		player->force.x = PLAYER_MOVE_FORCE;
-		player->walking = 1;
+		player->moveState = 1;
 	} else {
 		player->force.x = 0;
-		player->walking = 0;
+		player->moveState = 0;
 	}
 
 	if(player->thrust != PLAYER_THRUST_TIME) {
-		player->walking = 2;
+		player->moveState = 2;
 	}
 
-	if(player->walking == 1) {
+	if(player->moveState == 1) {
 		++player->frameCounter;
 
 		if(player->frameCounter >= (FPS/player->frameSpeed)) {
@@ -95,7 +94,7 @@ void playerUpdate(Player *player, float timestep) {
 			++player->curFrame;
 			if(player->curFrame > 3)
 				player->curFrame = 0;
-			player->width = player->tex[1].width/3;
+			player->width = (float)player->tex[1].width/3;
 			if(player->force.x < 0)
 				player->frame.width = -player->width;
 			else
@@ -104,13 +103,12 @@ void playerUpdate(Player *player, float timestep) {
 		}
 	} else {
 		player->curFrame = 0;
+		player->frame.width = player->width = (float)player->tex[player->moveState].width;
+		player->frame.x = 0;
 		if(player->vel.x < 0) {
-			player->width = player->tex[player->walking].width;
-			player->frame.width = -player->width;
-		} else {
-			player->frame.width = player->width = player->tex[player->walking].width;
+			player->frame.width *= -1;
+			//player->frame.x = 0; // TODO why do we have to move the frame?
 		}
-		player->frame.x = (float)player->curFrame*player->width;
 	}
 
 	player->accel = Vector2Scale(player->force, player->invmass);
@@ -176,7 +174,6 @@ int main(void) {
 		.frameSpeed = PLAYER_FRAME_SPEED,
 		.mass = PLAYER_MASS,
 		.invmass = PLAYER_INVMASS,
-		.debugcolor = GREEN,
 		.thrust = PLAYER_THRUST_TIME,
 	};
 
@@ -216,7 +213,7 @@ int main(void) {
 		float timestep = GetFrameTime();
 		playerUpdate(&mario, timestep);
 		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
-		camera.target = (Vector2){ mario.pos.x + 15, mario.pos.y+15};
+		camera.target = (Vector2){ mario.pos.x + mario.width*0.5, mario.pos.y + mario.height*0.5 };
 
 		BeginDrawing();
 
@@ -228,7 +225,7 @@ int main(void) {
 				DrawRectangleRec(*platform, RED);
 			//Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
 			//DrawRectangleRec(playerRect, mario.debugcolor);
-			DrawTextureRec(mario.tex[mario.walking], mario.frame, mario.pos, WHITE);
+			DrawTextureRec(mario.tex[mario.moveState], mario.frame, mario.pos, WHITE);
 		}
 		EndMode2D();
 
@@ -244,4 +241,10 @@ int main(void) {
 
 		EndDrawing();
 	}
+
+	UnloadTexture(mario.tex[0]);
+	UnloadTexture(mario.tex[1]);
+	UnloadTexture(mario.tex[2]);
+
+	CloseWindow();
 }
