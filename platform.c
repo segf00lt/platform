@@ -18,14 +18,9 @@
 const int screenWidth = 1500;
 const int screenHeight = 1000;
 const float friction = 9.20;
-const float drag = 1.00;
+const float drag = 1.20;
 const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
-const float G = 9000.0;
-//const float PLAYER_BOX_WIDTH = 15.0;
-//const float PLAYER_BOX_HEIGHT = 30.0;
-//const float HALF_PLAYER_BOX_WIDTH = 7.5;
-//const float HALF_PLAYER_BOX_HEIGHT = 15;
-//const float PLAYER_INITIAL_Y = GROUNDLEVEL-PLAYER_BOX_HEIGHT;
+const float G = 9500.0;
 const float PLAYER_INITIAL_X = 100.0;
 const float PLAYER_MOVE_FORCE = 1.5e5;
 const float PLAYER_JUMP_FORCE = -1e6;
@@ -33,7 +28,7 @@ const float PLAYER_MASS = 30;
 const float PLAYER_INVMASS = 1/PLAYER_MASS;
 const int PLAYER_THRUST_TIME = 5;
 const float MAX_DEPTH = 1200.0;
-const int PLAYER_FRAME_SPEED = 5;
+const int PLAYER_FRAME_SPEED = 15;
 const float FPS = 60;
 
 
@@ -56,6 +51,7 @@ struct Player {
 	float mass;
 	float invmass;
 	int moveState;
+	bool airborne;
 	int thrust;
 };
 
@@ -68,9 +64,11 @@ void playerUpdate(Player *player, float timestep) {
 
 	if(IsKeyDown(KEY_UP) && player->thrust > 0) {
 		player->force.y += PLAYER_JUMP_FORCE;
-		//player->thrust = 0;
 		--player->thrust;
+	} else {
+		player->thrust = 0;
 	}
+
 	if(IsKeyDown(KEY_LEFT)) {
 		player->force.x = -PLAYER_MOVE_FORCE;
 		player->moveState = 1;
@@ -82,9 +80,8 @@ void playerUpdate(Player *player, float timestep) {
 		player->moveState = 0;
 	}
 
-	if(player->thrust != PLAYER_THRUST_TIME) {
+	if(player->airborne)
 		player->moveState = 2;
-	}
 
 	if(player->moveState == 1) {
 		++player->frameCounter;
@@ -142,18 +139,23 @@ void playerUpdate(Player *player, float timestep) {
 			newpos.y -= newpos.y + player->height - platform->y;
 			player->thrust = PLAYER_THRUST_TIME;
 			colliding = true;
+			player->airborne = false;
 			break;
 		}
 	}
 
+	if(colliding)
+		player->thrust = PLAYER_THRUST_TIME;
+	else
+		player->airborne = true;
 	if(!colliding && player->thrust == PLAYER_THRUST_TIME) {
 		player->thrust = 0;
 	}
 
-	//if(newpos.y >= MAX_DEPTH) {
-	//	newpos.x = PLAYER_INITIAL_X;
-	//	newpos.y = GROUNDLEVEL-player->height;
-	//}
+	if(newpos.y >= MAX_DEPTH) {
+		newpos.x = PLAYER_INITIAL_X;
+		newpos.y = GROUNDLEVEL-player->height;
+	}
 	player->pos = newpos;
 }
 
@@ -210,14 +212,15 @@ int main(void) {
 
 	while(!WindowShouldClose()) {
 
-		float timestep = GetFrameTime();
-		playerUpdate(&mario, timestep);
-		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
-		camera.target = (Vector2){ mario.pos.x + mario.width*0.5, mario.pos.y + mario.height*0.5 };
-
 		BeginDrawing();
 
 		ClearBackground(BLACK);
+
+		float timestep = GetFrameTime();
+		playerUpdate(&mario, timestep);
+		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
+		camera.target = (Vector2){ mario.pos.x + 24, mario.pos.y + 24 };
+
 
 		BeginMode2D(camera);
 		{
@@ -247,4 +250,6 @@ int main(void) {
 	UnloadTexture(mario.tex[2]);
 
 	CloseWindow();
+
+	return 0;
 }
