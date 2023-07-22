@@ -64,13 +64,20 @@ bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p
 	float t, u;
 	float numerator, denominator;
 
-	denominator = 1/((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
+	float p12x = p1.x - p2.x;
+	float p12y = p1.y - p2.y;
+	float p34x = p3.x - p4.x;
+	float p34y = p3.y - p4.y;
+	float p13x = p1.x - p3.x;
+	float p13y = p1.y - p3.y;
 
-	numerator = (p1.x - p3.x)*(p3.y - p4.y) - (p1.y - p3.y)*(p3.x - p4.x);
+	denominator = 1/(p12x * p34y - p12y*p34x);
+
+	numerator = p13x * p34y - p13y * p34x;
 
 	t = numerator * denominator;
 
-	numerator = (p1.x - p3.x)*(p1.y - p2.y) - (p1.y - p3.y)*(p1.x - p2.x);
+	numerator = p13x * p12y - p13y * p12x;
 
 	u = numerator * denominator;
 
