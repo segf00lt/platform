@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <raylib.h>
 #include <raymath.h>
+#include <math.h>
 #include <assert.h>
 #include "stb_ds.h"
 #include "stb_sprintf.h"
@@ -15,8 +16,8 @@
 #define sprintf stbsp_sprintf
 #define SQUARE(x) (x*x)
 
-const int screenWidth = 1500;
-const int screenHeight = 1000;
+const int screenWidth = 1200;
+const int screenHeight = 900;
 const float friction = 9.20;
 const float drag = 1.20;
 const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
@@ -58,6 +59,25 @@ struct Player {
 Rectangle platforms[100];
 int platformCount = 4;
 bool gameOver = false;
+
+bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
+	float t, u;
+	float numerator, denominator;
+
+	denominator = 1/((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
+
+	numerator = (p1.x - p3.x)*(p3.y - p4.y) - (p1.y - p3.y)*(p3.x - p4.x);
+
+	t = numerator * denominator;
+
+	numerator = (p1.x - p3.x)*(p1.y - p2.y) - (p1.y - p3.y)*(p1.x - p2.x);
+
+	u = numerator * denominator;
+
+	*p = (Vector2){ p1.x + t*(p2.x - p1.x), p1.y + t*(p2.y - p1.y) };
+
+	return (0.0 <= t && t <= 1.0) && (0.0 <= u && u <= 1.0);
+}
 
 void playerUpdate(Player *player, float timestep) {
 	player->force.y = G * player->mass;
@@ -102,10 +122,8 @@ void playerUpdate(Player *player, float timestep) {
 		player->curFrame = 0;
 		player->frame.width = player->width = (float)player->tex[player->moveState].width;
 		player->frame.x = 0;
-		if(player->vel.x < 0) {
+		if(player->vel.x < 0)
 			player->frame.width *= -1;
-			//player->frame.x = 0; // TODO why do we have to move the frame?
-		}
 	}
 
 	player->accel = Vector2Scale(player->force, player->invmass);
@@ -127,16 +145,17 @@ void playerUpdate(Player *player, float timestep) {
 	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
 		Rectangle *platform = platforms+i;
-
-		if(newpos.x + player->width*0.5 >= platform->x &&
-		   newpos.x + player->width*0.5 <= platform->x + platform->width &&
-		   newpos.y + player->height >= platform->y &&
-		   player->pos.y+player->height <= platform->y &&
-		   player->vel.y >= 0)
-		{
-			player->force.y = G * player->mass;
+		Vector2 a = (Vector2){ player->pos.x, player->pos.y + player->height },
+			b = (Vector2){ newpos.x, newpos.y + player->height},
+			c = (Vector2){ platform->x, platform->y },
+			d = (Vector2){ platform->x + platform->width, platform->y };
+		Vector2 p = (Vector2){0};
+		bool intersect = lineSegIntersect(a, b, c, d, &p);
+		if(intersect && player->vel.y >= 0) {
+			printf("p = { %f, %f }\n", p.x, p.y);
 			player->vel.y = 0;
-			newpos.y -= newpos.y + player->height - platform->y;
+			// TODO newpos needs to adjusted differently
+			newpos.y = p.y - player->height;
 			player->thrust = PLAYER_THRUST_TIME;
 			colliding = true;
 			player->airborne = false;
@@ -144,18 +163,17 @@ void playerUpdate(Player *player, float timestep) {
 		}
 	}
 
-	if(colliding)
-		player->thrust = PLAYER_THRUST_TIME;
-	else
+	if(!colliding) {
 		player->airborne = true;
-	if(!colliding && player->thrust == PLAYER_THRUST_TIME) {
-		player->thrust = 0;
+		if(player->thrust == PLAYER_THRUST_TIME)
+			player->thrust = 0;
 	}
 
 	if(newpos.y >= MAX_DEPTH) {
 		newpos.x = PLAYER_INITIAL_X;
 		newpos.y = GROUNDLEVEL-player->height;
 	}
+
 	player->pos = newpos;
 }
 
@@ -217,6 +235,7 @@ int main(void) {
 		ClearBackground(BLACK);
 
 		float timestep = GetFrameTime();
+		//float timestep = 1.0f/60.0;
 		playerUpdate(&mario, timestep);
 		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
 		camera.target = (Vector2){ mario.pos.x + 24, mario.pos.y + 24 };
@@ -233,9 +252,10 @@ int main(void) {
 		EndMode2D();
 
 		float FPS = GetFPS();
-		char *fmt = "FPS: %f\nTIME: %f\nTHRUST: %i\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\n";
+		char *fmt =
+		"FPS: %f\nTIME: %f\nTHRUST: %i\nAIRBORNE: %i\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\n";
 		sprintf(buf, fmt,
-		FPS, timestep, mario.thrust,
+		FPS, timestep, mario.thrust, mario.airborne,
 		mario.force.x, mario.force.y,
 		mario.accel.x, mario.accel.y,
 		mario.vel.x, mario.vel.y);

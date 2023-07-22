@@ -3,3 +3,4 @@ tags
 platform
 vgcore*
 *.vim
+platform.dSYM/

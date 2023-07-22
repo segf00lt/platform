@@ -1,3 +1,4 @@
+CC = gcc
 CFLAGS = -g -Wall -Wpedantic -Wunused-const-variable -Werror
 LDFLAGS = -lraylib -lm
 
