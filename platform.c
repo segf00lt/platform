@@ -10,6 +10,7 @@
 #include "stb_ds.h"
 #include "stb_sprintf.h"
 
+#define inline __attribute__((always_inline))
 #define ARRLEN(x) (sizeof(x)/sizeof(*x))
 #define STRLEN(x) ((sizeof(x)/sizeof(*x))-1)
 #undef sprintf
@@ -25,11 +26,11 @@ const float G = 9500.0;
 const float PLAYER_INITIAL_X = 100.0;
 const float PLAYER_MOVE_FORCE = 1.5e5;
 const float PLAYER_JUMP_FORCE = -1e6;
-const float PLAYER_MASS = 30;
+const float PLAYER_MASS = 27;
 const float PLAYER_INVMASS = 1/PLAYER_MASS;
 const int PLAYER_THRUST_TIME = 5;
 const float MAX_DEPTH = 1200.0;
-const int PLAYER_FRAME_SPEED = 15;
+const int PLAYER_FRAME_SPEED = 30;
 const float FPS = 60;
 
 
@@ -57,10 +58,10 @@ struct Player {
 };
 
 Rectangle platforms[100];
-int platformCount = 4;
+int platformCount = 5;
 bool gameOver = false;
 
-bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
+inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
 	float t, u;
 	float numerator, denominator;
 
@@ -107,32 +108,6 @@ void playerUpdate(Player *player, float timestep) {
 		player->moveState = 0;
 	}
 
-	if(player->airborne)
-		player->moveState = 2;
-
-	if(player->moveState == 1) {
-		++player->frameCounter;
-
-		if(player->frameCounter >= (FPS/player->frameSpeed)) {
-			player->frameCounter = 0;
-			++player->curFrame;
-			if(player->curFrame > 3)
-				player->curFrame = 0;
-			player->width = (float)player->tex[1].width/3;
-			if(player->force.x < 0)
-				player->frame.width = -player->width;
-			else
-				player->frame.width = player->width;
-			player->frame.x = (float)player->curFrame*player->width;
-		}
-	} else {
-		player->curFrame = 0;
-		player->frame.width = player->width = (float)player->tex[player->moveState].width;
-		player->frame.x = 0;
-		if(player->vel.x < 0)
-			player->frame.width *= -1;
-	}
-
 	player->accel = Vector2Scale(player->force, player->invmass);
 
 	/*
@@ -148,28 +123,56 @@ void playerUpdate(Player *player, float timestep) {
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
 
+	if(player->airborne)
+		player->moveState = 2;
+
+	if(player->moveState == 1) {
+		++player->frameCounter;
+
+		if(player->frameCounter >= (FPS/player->frameSpeed)) {
+			player->frameCounter = 0;
+			++player->curFrame;
+			if(player->curFrame > 3)
+				player->curFrame = 0;
+			player->frame.width = (float)player->tex[1].width/3;
+			player->frame.x = (float)player->curFrame*player->frame.width;
+			if(*(int*)&player->vel.x < 0)
+				player->frame.width *= -1;
+		}
+	} else {
+		player->curFrame = 0;
+		player->frame.width = (float)player->tex[player->moveState].width;
+		player->frame.x = 0;
+		if(*(int*)&player->vel.x < 0)
+			player->frame.width *= -1;
+	}
+
 	player->airborne = true;
 	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
+		bool intersect = false;
+		Vector2 a, b, c, d, p;
 		Rectangle *platform = platforms+i;
-		Vector2 a = (Vector2){ player->pos.x, player->pos.y + player->height },
-			b = (Vector2){ newpos.x, newpos.y + player->height},
-			c = (Vector2){ platform->x, platform->y },
-			d = (Vector2){ platform->x + platform->width, platform->y };
-		Vector2 p = (Vector2){0};
-		bool intersect = lineSegIntersect(a, b, c, d, &p);
+
+		p = (Vector2){0};
+		a = (Vector2){ player->pos.x, player->pos.y + player->height };
+		b = (Vector2){ newpos.x, newpos.y + player->height};
+		c = (Vector2){ platform->x, platform->y };
+		d = (Vector2){ platform->x + platform->width, platform->y };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
 		if(intersect && player->vel.y >= 0) {
-			player->vel.y = 0;
+			player->vel.y = 0.0;
 			// TODO newpos needs to adjusted differently
 			newpos.y = p.y - player->height;
 			player->thrust = PLAYER_THRUST_TIME;
 			player->airborne = false;
-			break;
 		}
 	}
 
 	if(player->airborne && player->thrust == PLAYER_THRUST_TIME)
-			player->thrust = 0;
+		player->thrust = 0;
 
 	if(newpos.y >= MAX_DEPTH) {
 		newpos.x = PLAYER_INITIAL_X;
@@ -219,6 +222,12 @@ int main(void) {
 		.width = 200, .height = 30,
 	};
 
+	platforms[4] = (Rectangle){
+		.x = 1600, .y = GROUNDLEVEL- 100,
+		.width = 50, .height = 100,
+	};
+
+
 	mario.tex[0] = LoadTexture("mario_still_scaled.png");
 	mario.tex[1] = LoadTexture("mario_anim_scaled.png");
 	mario.tex[2] = LoadTexture("mario_jump_scaled.png");
@@ -237,19 +246,24 @@ int main(void) {
 		ClearBackground(BLACK);
 
 		float timestep = GetFrameTime();
-		//float timestep = 1.0f/60.0;
 		playerUpdate(&mario, timestep);
 		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
-		camera.target = (Vector2){ mario.pos.x + 24, mario.pos.y + 24 };
+		camera.target = (Vector2){ mario.pos.x + mario.width*0.5, mario.pos.y + mario.height*0.5 };
 
 
 		BeginMode2D(camera);
 		{
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform)
 				DrawRectangleRec(*platform, RED);
-			//Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
-			//DrawRectangleRec(playerRect, mario.debugcolor);
-			DrawTextureRec(mario.tex[mario.moveState], mario.frame, mario.pos, WHITE);
+			Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
+			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
+			Vector2 framepos;
+			if(*(int*)&mario.vel.x < 0 && mario.moveState > 0) {
+				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.width, mario.pos.y };
+			} else {
+				framepos = mario.pos;
+			}
+			DrawTextureRec(mario.tex[mario.moveState], mario.frame, framepos, WHITE);
 		}
 		EndMode2D();
 
