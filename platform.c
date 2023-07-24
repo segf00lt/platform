@@ -148,7 +148,7 @@ void playerUpdate(Player *player, float timestep) {
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
 
-	bool colliding = false;
+	player->airborne = true;
 	/* inelastic collisions */
 	for(int i = 0; i < platformCount; ++i) {
 		Rectangle *platform = platforms+i;
@@ -159,22 +159,17 @@ void playerUpdate(Player *player, float timestep) {
 		Vector2 p = (Vector2){0};
 		bool intersect = lineSegIntersect(a, b, c, d, &p);
 		if(intersect && player->vel.y >= 0) {
-			printf("p = { %f, %f }\n", p.x, p.y);
 			player->vel.y = 0;
 			// TODO newpos needs to adjusted differently
 			newpos.y = p.y - player->height;
 			player->thrust = PLAYER_THRUST_TIME;
-			colliding = true;
 			player->airborne = false;
 			break;
 		}
 	}
 
-	if(!colliding) {
-		player->airborne = true;
-		if(player->thrust == PLAYER_THRUST_TIME)
+	if(player->airborne && player->thrust == PLAYER_THRUST_TIME)
 			player->thrust = 0;
-	}
 
 	if(newpos.y >= MAX_DEPTH) {
 		newpos.x = PLAYER_INITIAL_X;

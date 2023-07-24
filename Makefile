@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wall -Wpedantic -Wunused-const-variable -Werror
+CFLAGS = -g -Wall -Wpedantic -Wunused-const-variable -Werror -Wno-attributes
 LDFLAGS = -lraylib -lm
 
 all:
