@@ -180,7 +180,7 @@ void playerUpdate(Player *player, float timestep) {
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.x <= 0) {
-			*(unsigned int*)&player->vel.x = 0x80800000;
+			*(unsigned int*)&player->vel.x = 0x80000000;
 			newpos.x = p.x;
 		}
 
