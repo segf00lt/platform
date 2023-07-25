@@ -23,7 +23,7 @@ const int screenWidth = 1200;
 const int screenHeight = 900;
 const float friction = 9.20;
 const float drag = 1.20;
-const float GROUNDLEVEL = screenHeight - 0.3*screenHeight;
+const float GROUNDLEVEL = screenHeight - 210;
 const float G = 9500.0;
 const float PLAYER_INITIAL_X = 100.0;
 const float PLAYER_MOVE_FORCE = 1.5e5;
@@ -34,13 +34,101 @@ const int PLAYER_THRUST_TIME = 5;
 const float MAX_DEPTH = 1200.0;
 const int PLAYER_FRAME_SPEED = 30;
 const float FPS = 60;
+const int TILE_SIZE = 20; // tiles will be 20x20 pixels
 
+const char *WORLD =
+"\
+................................................................\
+................................................................\
+.....................................##########.................\
+............########............................................\
+................................................................\
+.............................######.............................\
+................................................................\
+................................................................\
+.........############..............#############................\
+................................................................\
+................................................................\
+################################################################\
+................................................................\
+................................................................\
+................................................................\
+................................................................\
+................................................................\
+";
 
-typedef struct Player Player;
+// TODO add tiles
+// TODO fix vertically adjacent collisions
+	/*
+		if(*tp != '#')
+			continue;
+		size_t coord = tp - WORLD;
+		float x = (float)(coord & 0x3f);
+		float y = (float)(coord >> 6);
+		Rectangle tile = (Rectangle){ x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+		bool intersect = false;
+		Vector2 a, b, c, d, p;
+		//Rectangle *platform = platforms+i;
+
+		p = (Vector2){0};
+		a = (Vector2){ player->pos.x, player->pos.y };
+		b = (Vector2){ newpos.x     , newpos.y      };
+
+		// top face
+		c = (Vector2){ tile.x - player->widthH, tile.y - player->heightH };
+		d = (Vector2){ tile.x + tile.width + player->widthH, tile.y - player->heightH };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.y >= 0) {
+			player->vel.y = 0.0;
+			newpos.y = p.y;
+			player->thrust = PLAYER_THRUST_TIME;
+			player->airborne = false;
+			printf("TOP FACE\n");
+		}
+
+		// right face
+		c = d;
+		d = (Vector2){ tile.x + tile.width + player->widthH, tile.y + tile.height + player->widthH };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.x <= 0) {
+			*(unsigned int*)&player->vel.x = 0x80000000;
+			newpos.x = p.x;
+			printf("RIGHT FACE\n");
+		}
+
+		// bottom face
+		c = (Vector2){ tile.x - player->widthH, tile.y + tile.height + player->widthH };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.y <= 0) {
+			player->vel.y = 0.0;
+			newpos.y = p.y;
+			printf("BOTTOM FACE\n");
+		}
+
+		// left face
+		d = c;
+		c = (Vector2){ tile.x - player->widthH, tile.y - player->heightH };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.x >= 0) {
+			player->vel.x = 0.0;
+			newpos.x = p.x;
+			printf("LEFT FACE\n");
+		}
+
+	*/
+typedef struct PlayerState PlayerState;
 //typedef struct Platform Platform;
 //typedef struct Goomba Goomba;
 
-struct Player {
+struct PlayerState {
 	Vector2 pos;
 	Vector2 vel;
 	Vector2 accel;
@@ -59,8 +147,11 @@ struct Player {
 	int thrust;
 };
 
+Vector2 debugDirection;
+Vector2 debugIntersectPoint;
+
 Rectangle platforms[100];
-int platformCount = 5;
+int platformCount = 6;
 bool gameOver = false;
 
 inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
@@ -74,7 +165,8 @@ inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vec
 	float p13x = p1.x - p3.x;
 	float p13y = p1.y - p3.y;
 
-	denominator = 1/(p12x * p34y - p12y*p34x);
+	denominator = p12x*p34y - p12y*p34x;
+	denominator = 1/denominator;
 
 	numerator = p13x * p34y - p13y * p34x;
 
@@ -89,7 +181,7 @@ inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vec
 	return (0.0 <= t && t <= 1.0) && (0.0 <= u && u <= 1.0);
 }
 
-void playerUpdate(Player *player, float timestep) {
+void playerUpdate(PlayerState *player, float timestep) {
 	player->force.y = G * player->mass;
 
 	if(IsKeyDown(KEY_UP) && player->thrust > 0) {
@@ -125,6 +217,7 @@ void playerUpdate(Player *player, float timestep) {
 	player->vel.y += accel.y - timestep*drag*player->vel.y;
 	accel = Vector2Scale(accel, HALF(timestep));
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
+	debugDirection = offset;
 	Vector2 newpos = Vector2Add(player->pos, offset);
 
 	if(player->airborne)
@@ -171,19 +264,10 @@ void playerUpdate(Player *player, float timestep) {
 			player->airborne = false;
 		}
 
-		// right face
-		c = d;
-		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->widthH };
-
-		intersect = lineSegIntersect(a, b, c, d, &p);
-
-		if(intersect && player->vel.x <= 0) {
-			*(unsigned int*)&player->vel.x = 0x80000000;
-			newpos.x = p.x;
-		}
-
 		// bottom face
-		c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->widthH };
+		p = (Vector2){0};
+		c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
@@ -192,13 +276,37 @@ void playerUpdate(Player *player, float timestep) {
 			newpos.y = p.y;
 		}
 
-		// left face
-		d = c;
-		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
+	}
+
+	for(int i = 0; i < platformCount; ++i) {
+		bool intersect = false;
+		Vector2 a, b, c, d, p;
+		Rectangle *platform = platforms+i;
+
+		p = (Vector2){0};
+		a = (Vector2){ player->pos.x, player->pos.y };
+		b = (Vector2){ newpos.x     , newpos.y      };
+
+		// right face
+		c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
-		if(intersect && player->vel.x >= 0) {
+		if(intersect && player->vel.x <= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
+			*(unsigned int*)&player->vel.x = 0x80000000;
+			newpos.x = p.x;
+		}
+
+		// left face
+		p = (Vector2){0};
+		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+		debugIntersectPoint = p;
+
+		if(intersect && player->vel.x >= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
 			player->vel.x = 0.0;
 			newpos.x = p.x;
 		}
@@ -207,7 +315,7 @@ void playerUpdate(Player *player, float timestep) {
 	if(player->airborne && player->thrust == PLAYER_THRUST_TIME)
 		player->thrust = 0;
 
-	if(newpos.y >= MAX_DEPTH) {
+	if(Vector2LengthSqr(player->vel) >= SQUARE(7000)) {
 		newpos.x = PLAYER_INITIAL_X;
 		newpos.y = GROUNDLEVEL-player->heightH;
 	}
@@ -221,7 +329,7 @@ int main(void) {
 	InitWindow(screenWidth, screenHeight, "platform");
 	SetTargetFPS(FPS);
 
-	Player mario = {
+	PlayerState mario = {
 		//.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
 		.vel = {0},
 		.pos = { .x = PLAYER_INITIAL_X, },
@@ -241,7 +349,7 @@ int main(void) {
 	};
 
 	platforms[1] = (Rectangle){
-		.x = 300, .y = GROUNDLEVEL-120,
+		.x = 300, .y = GROUNDLEVEL-190,
 		.width = 400, .height = 40,
 	};
 
@@ -256,6 +364,11 @@ int main(void) {
 	};
 
 	platforms[4] = (Rectangle){
+		.x = 660, .y = GROUNDLEVEL-300,
+		.width = 200, .height = 30,
+	};
+
+	platforms[5] = (Rectangle){
 		.x = 600, .y = GROUNDLEVEL- 100,
 		.width = 50, .height = 100,
 	};
@@ -269,6 +382,7 @@ int main(void) {
 	mario.frame.height = mario.tex[0].height;
 	mario.widthH = mario.frame.width * 0.5;
 	mario.heightH = mario.frame.height * 0.5;
+	assert(mario.heightH == 24);
 	mario.pos.y = GROUNDLEVEL-mario.heightH;
 	Camera2D camera = {0};
 	camera.rotation = 0.0f;
@@ -300,6 +414,10 @@ int main(void) {
 			if(*(int*)&mario.vel.x < 0)
 				frame.width *= -1;
 			DrawTextureRec(mario.tex[mario.moveState], frame, framepos, WHITE);
+			Vector2 a, b;
+			a = mario.pos;
+			b = Vector2Add(mario.pos, debugDirection);
+			DrawLineEx(a, b, 2.0, YELLOW);
 		}
 		EndMode2D();
 
@@ -312,14 +430,16 @@ int main(void) {
 		mario.accel.x, mario.accel.y,
 		mario.vel.x, mario.vel.y);
 
-		Vector2 a, b;
-		a = (Vector2){ 0, HALF(screenHeight) };
-		b = (Vector2){ screenWidth, HALF(screenHeight) };
-		DrawLineV(a, b, YELLOW);
-		a = (Vector2){ HALF(screenWidth), 0 };
-		b = (Vector2){ HALF(screenWidth), screenHeight };
-		DrawLineV(a, b, YELLOW);
+		//a = (Vector2){ 0, HALF(screenHeight) };
+		//b = (Vector2){ screenWidth, HALF(screenHeight) };
+		//DrawLineV(a, b, YELLOW);
+		//a = (Vector2){ HALF(screenWidth), 0 };
+		//b = (Vector2){ HALF(screenWidth), screenHeight };
+		//DrawLineV(a, b, YELLOW);
 		DrawText(buf, 10, 10, 15, RAYWHITE);
+
+		sprintf(buf, "PLATFORM LEFT FACE INTERSECT: x = %f, y = %f\n", debugIntersectPoint.x, debugIntersectPoint.y);
+		DrawText(buf, 400, 10, 15, RAYWHITE);
 
 		EndDrawing();
 	}
