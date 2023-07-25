@@ -155,19 +155,53 @@ void playerUpdate(Player *player, float timestep) {
 		Rectangle *platform = platforms+i;
 
 		p = (Vector2){0};
-		a = (Vector2){ player->pos.x, player->pos.y + player->height };
-		b = (Vector2){ newpos.x, newpos.y + player->height};
-		c = (Vector2){ platform->x, platform->y };
-		d = (Vector2){ platform->x + platform->width, platform->y };
+		a = (Vector2){ player->pos.x, player->pos.y };
+		b = (Vector2){ newpos.x     , newpos.y      };
+
+		// top face
+		c = (Vector2){ platform->x - player->width*0.5, platform->y - player->height*0.5 };
+		d = (Vector2){ platform->x + platform->width + player->width*0.5, platform->y - player->height*0.5 };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.y >= 0) {
 			player->vel.y = 0.0;
 			// TODO newpos needs to adjusted differently
-			newpos.y = p.y - player->height;
+			newpos.y = p.y;
 			player->thrust = PLAYER_THRUST_TIME;
 			player->airborne = false;
+		}
+
+		// right face
+		c = d;
+		d = (Vector2){ platform->x + platform->width + player->width*0.5, platform->y + platform->height + player->width*0.5 };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.x <= 0) {
+			player->vel.x = 0.0;
+			newpos.x = p.x;
+		}
+
+		// bottom face
+		c = (Vector2){ platform->x - player->width*0.5, platform->y + platform->height + player->width*0.5 };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.y <= 0) {
+			player->vel.y = 0.0;
+			newpos.y = p.y;
+		}
+
+		// left face
+		d = c;
+		c = (Vector2){ platform->x - player->width*0.5, platform->y - player->height*0.5 };
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(intersect && player->vel.x >= 0) {
+			player->vel.x = 0.0;
+			newpos.x = p.x;
 		}
 	}
 
@@ -191,7 +225,7 @@ int main(void) {
 	Player mario = {
 		//.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
 		.vel = {0},
-		.pos = { .x = PLAYER_INITIAL_X },
+		.pos = { .x = PLAYER_INITIAL_X, },
 		.force = { .x = 0, .y = 30 * G },
 		.accel = { .x = 0 , .y = G },
 		.frameCounter = 0,
@@ -223,7 +257,7 @@ int main(void) {
 	};
 
 	platforms[4] = (Rectangle){
-		.x = 1600, .y = GROUNDLEVEL- 100,
+		.x = 600, .y = GROUNDLEVEL- 100,
 		.width = 50, .height = 100,
 	};
 
@@ -234,7 +268,7 @@ int main(void) {
 	mario.frame.x = mario.frame.y = 0;
 	mario.frame.width = mario.width = mario.tex[0].width;
 	mario.frame.height = mario.height = mario.tex[0].height;
-	mario.pos.y = GROUNDLEVEL-mario.height;
+	mario.pos.y = GROUNDLEVEL-mario.height*0.5;
 	Camera2D camera = {0};
 	camera.rotation = 0.0f;
 	camera.zoom = 1.5f;
@@ -248,21 +282,18 @@ int main(void) {
 		float timestep = GetFrameTime();
 		playerUpdate(&mario, timestep);
 		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
-		camera.target = (Vector2){ mario.pos.x + mario.width*0.5, mario.pos.y + mario.height*0.5 };
+		camera.target = (Vector2){ mario.pos.x, mario.pos.y };
 
 
 		BeginMode2D(camera);
 		{
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform)
 				DrawRectangleRec(*platform, RED);
-			Rectangle playerRect = (Rectangle){ mario.pos.x, mario.pos.y, mario.width, mario.height};
+			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.width*0.5, mario.pos.y - mario.height*0.5, mario.width, mario.height};
 			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
-			Vector2 framepos;
-			if(*(int*)&mario.vel.x < 0 && mario.moveState > 0) {
-				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.width, mario.pos.y };
-			} else {
-				framepos = mario.pos;
-			}
+			Vector2 framepos = (Vector2){ mario.pos.x - mario.width*0.5, mario.pos.y - mario.height*0.5 };
+			if(*(int*)&mario.vel.x < 0 && mario.moveState > 0)
+				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.width*0.5, mario.pos.y - mario.height*0.5 };
 			DrawTextureRec(mario.tex[mario.moveState], mario.frame, framepos, WHITE);
 		}
 		EndMode2D();
@@ -276,6 +307,13 @@ int main(void) {
 		mario.accel.x, mario.accel.y,
 		mario.vel.x, mario.vel.y);
 
+		Vector2 a, b;
+		a = (Vector2){ 0, screenHeight*0.5 };
+		b = (Vector2){ screenWidth, screenHeight*0.5 };
+		DrawLineV(a, b, YELLOW);
+		a = (Vector2){ screenWidth*0.5, 0 };
+		b = (Vector2){ screenWidth*0.5, screenHeight };
+		DrawLineV(a, b, YELLOW);
 		DrawText(buf, 10, 10, 15, RAYWHITE);
 
 		EndDrawing();
