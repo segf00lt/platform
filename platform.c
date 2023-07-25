@@ -16,6 +16,8 @@
 #undef sprintf
 #define sprintf stbsp_sprintf
 #define SQUARE(x) (x*x)
+#define DOUBLE(x) (x+x)
+#define HALF(x) (x*0.5f)
 
 const int screenWidth = 1200;
 const int screenHeight = 900;
@@ -48,8 +50,8 @@ struct Player {
 	int curFrame;
 	int frameCounter;
 	int frameSpeed;
-	float width;
-	float height;
+	float widthH; // half of the width
+	float heightH; // half of the height
 	float mass;
 	float invmass;
 	int moveState;
@@ -119,7 +121,7 @@ void playerUpdate(Player *player, float timestep) {
 	Vector2 accel = Vector2Scale(player->accel, timestep);
 	player->vel.x += accel.x - timestep*friction*player->vel.x;
 	player->vel.y += accel.y - timestep*drag*player->vel.y;
-	accel = Vector2Scale(accel, timestep*0.5);
+	accel = Vector2Scale(accel, HALF(timestep));
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
 	Vector2 newpos = Vector2Add(player->pos, offset);
 
@@ -159,14 +161,13 @@ void playerUpdate(Player *player, float timestep) {
 		b = (Vector2){ newpos.x     , newpos.y      };
 
 		// top face
-		c = (Vector2){ platform->x - player->width*0.5, platform->y - player->height*0.5 };
-		d = (Vector2){ platform->x + platform->width + player->width*0.5, platform->y - player->height*0.5 };
+		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.y >= 0) {
 			player->vel.y = 0.0;
-			// TODO newpos needs to adjusted differently
 			newpos.y = p.y;
 			player->thrust = PLAYER_THRUST_TIME;
 			player->airborne = false;
@@ -174,7 +175,7 @@ void playerUpdate(Player *player, float timestep) {
 
 		// right face
 		c = d;
-		d = (Vector2){ platform->x + platform->width + player->width*0.5, platform->y + platform->height + player->width*0.5 };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->widthH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
@@ -184,7 +185,7 @@ void playerUpdate(Player *player, float timestep) {
 		}
 
 		// bottom face
-		c = (Vector2){ platform->x - player->width*0.5, platform->y + platform->height + player->width*0.5 };
+		c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->widthH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
@@ -195,7 +196,7 @@ void playerUpdate(Player *player, float timestep) {
 
 		// left face
 		d = c;
-		c = (Vector2){ platform->x - player->width*0.5, platform->y - player->height*0.5 };
+		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
 
 		intersect = lineSegIntersect(a, b, c, d, &p);
 
@@ -210,7 +211,7 @@ void playerUpdate(Player *player, float timestep) {
 
 	if(newpos.y >= MAX_DEPTH) {
 		newpos.x = PLAYER_INITIAL_X;
-		newpos.y = GROUNDLEVEL-player->height;
+		newpos.y = GROUNDLEVEL-player->heightH;
 	}
 
 	player->pos = newpos;
@@ -266,9 +267,11 @@ int main(void) {
 	mario.tex[1] = LoadTexture("mario_anim_scaled.png");
 	mario.tex[2] = LoadTexture("mario_jump_scaled.png");
 	mario.frame.x = mario.frame.y = 0;
-	mario.frame.width = mario.width = mario.tex[0].width;
-	mario.frame.height = mario.height = mario.tex[0].height;
-	mario.pos.y = GROUNDLEVEL-mario.height*0.5;
+	mario.frame.width = mario.tex[0].width;
+	mario.frame.height = mario.tex[0].height;
+	mario.widthH = mario.frame.width * 0.5;
+	mario.heightH = mario.frame.height * 0.5;
+	mario.pos.y = GROUNDLEVEL-mario.heightH;
 	Camera2D camera = {0};
 	camera.rotation = 0.0f;
 	camera.zoom = 1.5f;
@@ -281,7 +284,7 @@ int main(void) {
 
 		float timestep = GetFrameTime();
 		playerUpdate(&mario, timestep);
-		camera.offset = (Vector2){ screenWidth*0.5f, screenHeight*0.5f };
+		camera.offset = (Vector2){ HALF(screenWidth), HALF(screenHeight) };
 		camera.target = (Vector2){ mario.pos.x, mario.pos.y };
 
 
@@ -289,11 +292,11 @@ int main(void) {
 		{
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform)
 				DrawRectangleRec(*platform, RED);
-			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.width*0.5, mario.pos.y - mario.height*0.5, mario.width, mario.height};
+			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH, DOUBLE(mario.widthH), DOUBLE(mario.heightH)};
 			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
-			Vector2 framepos = (Vector2){ mario.pos.x - mario.width*0.5, mario.pos.y - mario.height*0.5 };
+			Vector2 framepos = (Vector2){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH };
 			if(*(int*)&mario.vel.x < 0 && mario.moveState > 0)
-				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.width*0.5, mario.pos.y - mario.height*0.5 };
+				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.widthH, mario.pos.y - mario.heightH };
 			DrawTextureRec(mario.tex[mario.moveState], mario.frame, framepos, WHITE);
 		}
 		EndMode2D();
@@ -308,11 +311,11 @@ int main(void) {
 		mario.vel.x, mario.vel.y);
 
 		Vector2 a, b;
-		a = (Vector2){ 0, screenHeight*0.5 };
-		b = (Vector2){ screenWidth, screenHeight*0.5 };
+		a = (Vector2){ 0, HALF(screenHeight) };
+		b = (Vector2){ screenWidth, HALF(screenHeight) };
 		DrawLineV(a, b, YELLOW);
-		a = (Vector2){ screenWidth*0.5, 0 };
-		b = (Vector2){ screenWidth*0.5, screenHeight };
+		a = (Vector2){ HALF(screenWidth), 0 };
+		b = (Vector2){ HALF(screenWidth), screenHeight };
 		DrawLineV(a, b, YELLOW);
 		DrawText(buf, 10, 10, 15, RAYWHITE);
 
