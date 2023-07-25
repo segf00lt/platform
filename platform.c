@@ -119,7 +119,9 @@ void playerUpdate(Player *player, float timestep) {
 	 */
 
 	Vector2 accel = Vector2Scale(player->accel, timestep);
-	player->vel.x += accel.x - timestep*friction*player->vel.x;
+	float velx = player->vel.x + accel.x - timestep*friction*player->vel.x;
+	if(velx != 0.0f)
+		player->vel.x = velx;
 	player->vel.y += accel.y - timestep*drag*player->vel.y;
 	accel = Vector2Scale(accel, HALF(timestep));
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
@@ -138,15 +140,11 @@ void playerUpdate(Player *player, float timestep) {
 				player->curFrame = 0;
 			player->frame.width = (float)player->tex[1].width/3;
 			player->frame.x = (float)player->curFrame*player->frame.width;
-			if(*(int*)&player->vel.x < 0)
-				player->frame.width *= -1;
 		}
 	} else {
 		player->curFrame = 0;
 		player->frame.width = (float)player->tex[player->moveState].width;
 		player->frame.x = 0;
-		if(*(int*)&player->vel.x < 0)
-			player->frame.width *= -1;
 	}
 
 	player->airborne = true;
@@ -267,7 +265,7 @@ int main(void) {
 	mario.tex[1] = LoadTexture("mario_anim_scaled.png");
 	mario.tex[2] = LoadTexture("mario_jump_scaled.png");
 	mario.frame.x = mario.frame.y = 0;
-	mario.frame.width = mario.tex[0].width;
+	mario.frame.width = mario.tex[0].width - 10;
 	mario.frame.height = mario.tex[0].height;
 	mario.widthH = mario.frame.width * 0.5;
 	mario.heightH = mario.frame.height * 0.5;
@@ -294,10 +292,14 @@ int main(void) {
 				DrawRectangleRec(*platform, RED);
 			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH, DOUBLE(mario.widthH), DOUBLE(mario.heightH)};
 			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
-			Vector2 framepos = (Vector2){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH };
-			if(*(int*)&mario.vel.x < 0 && mario.moveState > 0)
-				framepos = (Vector2){ mario.pos.x - (float)mario.tex[2].width + mario.widthH, mario.pos.y - mario.heightH };
-			DrawTextureRec(mario.tex[mario.moveState], mario.frame, framepos, WHITE);
+			Vector2 framepos = (Vector2){
+				mario.pos.x - mario.frame.width*0.5,
+				mario.pos.y - mario.frame.height*0.5,
+			};
+			Rectangle frame = mario.frame;
+			if(*(int*)&mario.vel.x < 0)
+				frame.width *= -1;
+			DrawTextureRec(mario.tex[mario.moveState], frame, framepos, WHITE);
 		}
 		EndMode2D();
 
