@@ -15,9 +15,11 @@
 #define STRLEN(x) ((sizeof(x)/sizeof(*x))-1)
 #undef sprintf
 #define sprintf stbsp_sprintf
-#define SQUARE(x) (x*x)
+#define SQR(x) (x*x)
 #define DOUBLE(x) (x+x)
 #define HALF(x) (x*0.5f)
+#define MIN(a,b) ((a < b) ? a : b)
+#define MAX(a,b) ((a > b) ? a : b)
 
 const int screenWidth = 1200;
 const int screenHeight = 900;
@@ -123,74 +125,6 @@ const char *WORLD =
 		}
 
 	*/
-	/*
-	for(int i = 0; i < platformCount; ++i) {
-		bool intersect = false;
-		Vector2 a, b, c, d, p;
-		Rectangle *platform = platforms+i;
-
-
-		// top face
-		a = (Vector2){ player->pos.x, player->pos.y + player->heightH };
-		//b = (Vector2){ newpos.x , newpos.y + player->heightH };
-		b = Vector2Add(a, offset);
-		c = (Vector2){ platform->x, platform->y };
-		d = (Vector2){ platform->x + platform->width, platform->y };
-
-		intersect = lineSegIntersect(a, b, c, d, &p);
-
-		if(intersect && player->vel.y >= 0) {
-			player->vel.y = 0.0;
-			newpos.y = p.y - player->heightH;
-			player->thrust = PLAYER_THRUST_TIME;
-			player->airborne = false;
-		}
-
-		// bottom face
-		a = (Vector2){ player->pos.x, player->pos.y - player->heightH };
-		//b = (Vector2){ newpos.x , newpos.y - player->heightH };
-		b = Vector2Add(a, offset);
-		c = (Vector2){ platform->x, platform->y + platform->height };
-		d = (Vector2){ platform->x + platform->width, platform->y + platform->height };
-
-		intersect = lineSegIntersect(a, b, c, d, &p);
-
-		if(intersect && player->vel.y <= 0) {
-			*(unsigned int*)&player->vel.y = 0x80000000;
-			newpos.y = p.y + player->heightH;
-		}
-
-		// right face
-		a = (Vector2){ player->pos.x - player->widthH, player->pos.y };
-		//b = (Vector2){ newpos.x - player->widthH, newpos.y };
-		b = Vector2Add(a, offset);
-		c = (Vector2){ platform->x + platform->width, platform->y };
-		d = (Vector2){ platform->x + platform->width, platform->y + platform->height };
-
-		intersect = lineSegIntersect(a, b, c, d, &p);
-
-		if(intersect && player->vel.x <= 0) {
-			*(unsigned int*)&player->vel.x = 0x80000000;
-			newpos.x = p.x + player->widthH;
-		}
-
-		// left face
-		a = (Vector2){ player->pos.x + player->widthH, player->pos.y };
-		//b = (Vector2){ newpos.x + player->widthH, newpos.y };
-		b = Vector2Add(a, offset);
-		c = (Vector2){ platform->x, platform->y };
-		d = (Vector2){ platform->x, platform->y + platform->height };
-
-		intersect = lineSegIntersect(a, b, c, d, &p);
-		debugIntersectPoint = p;
-
-		if(intersect && player->vel.x >= 0) {
-			player->vel.x = 0.0;
-			newpos.x = p.x - player->widthH;
-		}
-	}
-
-	 */
 typedef struct PlayerState PlayerState;
 //typedef struct Platform Platform;
 //typedef struct Goomba Goomba;
@@ -218,7 +152,7 @@ Vector2 debugDirection;
 Vector2 debugIntersectPoint;
 
 Rectangle platforms[8];
-int platformCount = ARRLEN(platforms);
+const int platformCount = ARRLEN(platforms);
 bool gameOver = false;
 
 inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
@@ -307,152 +241,134 @@ void playerUpdate(PlayerState *player, float timestep) {
 		player->frame.x = 0;
 	}
 
-	player->airborne = true;
 	/* inelastic collisions */
-	if(fabsf(offset.x) > fabsf(offset.y)) {
-		for(int i = 0; i < platformCount; ++i) {
-			bool intersect = false;
-			Vector2 a, b, c, d, p;
-			Rectangle *platform = platforms+i;
 
-			p = (Vector2){0};
-			a = (Vector2){ player->pos.x, player->pos.y };
-			b = (Vector2){ newpos.x     , newpos.y      };
+	player->airborne = true;
 
-			// top face
-			c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
+	int indexes[platformCount];
+	float distances[platformCount];
 
-			intersect = lineSegIntersect(a, b, c, d, &p);
-
-			if(intersect && player->vel.y >= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.y = 0.0;
-				newpos.y = p.y;
-				player->thrust = PLAYER_THRUST_TIME;
-				player->airborne = false;
+	// order platforms by distance
+	for(int i = 0; i < platformCount; ++i) {
+		Rectangle *platform = platforms+i;
+		int index = i;
+		Vector2 v = (Vector2){ platform->x + HALF(platform->width) - player->pos.x, platform->y + HALF(platform->height) - player->pos.y };
+		float dist = SQR(v.x) + SQR(v.y);
+		indexes[i] = i;
+		distances[i] = dist;
+		for(int j = 1, k; j < i; j++) {
+			index = indexes[j];
+			dist = distances[j];
+			k = j - 1;
+			while (k >= 0 && distances[k] > dist) {
+				indexes[k+1] = indexes[k];
+				distances[k+1] = distances[k];
+				--k;
 			}
+			indexes[k+1] = index;
+			distances[k+1] = dist;
+		}
+	}
 
-			// bottom face
-			p = (Vector2){0};
-			c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
+	// TODO need to properly ignore corners
+	// maybe add intersect distance to sort critera?
+	// currently our guy is colliding with corners of vertically stacked platforms
+	// this has to do with which corners we are ignoring
+	// revisit how we ignore corners to solve this
+	for(int i = 0; i < platformCount; ++i) {
+		bool intersect = false;
+		Vector2 a, b, c, d, p;
+		Vector2 v;
+		float f;
+		Rectangle *platform = platforms+indexes[i];
 
-			intersect = lineSegIntersect(a, b, c, d, &p);
+		p = (Vector2){0};
+		a = (Vector2){ player->pos.x, player->pos.y };
+		b = (Vector2){ newpos.x     , newpos.y      };
 
-			if(intersect && player->vel.y <= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.y = 0.0;
-				newpos.y = p.y;
-			}
+		// top face
+		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
+
+		v = Vector2Subtract(d, c);
+		f = Vector2DotProduct(player->vel, v);
+
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(f == 0.0f)
+			intersect &= !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y);
+
+		if(intersect && player->vel.y >= 0) {
+			player->vel.y = 0.0;
+			newpos.y = p.y;
+			player->thrust = PLAYER_THRUST_TIME;
+			player->airborne = false;
+			continue;
 		}
 
-		for(int i = 0; i < platformCount; ++i) {
-			bool intersect = false;
-			Vector2 a, b, c, d, p;
-			Rectangle *platform = platforms+i;
+		// bottom face
+		p = (Vector2){0};
+		c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
 
-			p = (Vector2){0};
-			a = (Vector2){ player->pos.x, player->pos.y };
-			b = (Vector2){ newpos.x     , newpos.y      };
+		v = Vector2Subtract(d, c);
+		f = Vector2DotProduct(player->vel, v);
 
-			// right face
-			c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
-			intersect = lineSegIntersect(a, b, c, d, &p);
+		if(f == 0.0f)
+			intersect &= !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y);
 
-			if(intersect && player->vel.x <= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				*(unsigned int*)&player->vel.x = 0x80000000;
-				newpos.x = p.x;
-			}
-
-			// left face
-			p = (Vector2){0};
-			c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
-
-			intersect = lineSegIntersect(a, b, c, d, &p);
-			debugIntersectPoint = p;
-
-			if(intersect && player->vel.x >= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.x = 0.0;
-				newpos.x = p.x;
-			}
-		}
-	} else {
-		for(int i = 0; i < platformCount; ++i) {
-			bool intersect = false;
-			Vector2 a, b, c, d, p;
-			Rectangle *platform = platforms+i;
-
-			p = (Vector2){0};
-			a = (Vector2){ player->pos.x, player->pos.y };
-			b = (Vector2){ newpos.x     , newpos.y      };
-
-			// right face
-			c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
-
-			intersect = lineSegIntersect(a, b, c, d, &p);
-
-			if(intersect && player->vel.x <= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				*(unsigned int*)&player->vel.x = 0x80000000;
-				newpos.x = p.x;
-			}
-
-			// left face
-			p = (Vector2){0};
-			c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
-
-			intersect = lineSegIntersect(a, b, c, d, &p);
-			debugIntersectPoint = p;
-
-			if(intersect && player->vel.x >= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.x = 0.0;
-				newpos.x = p.x;
-			}
+		if(intersect && player->vel.y < 0) {
+			player->vel.y = 0.0;
+			newpos.y = p.y;
+			continue;
 		}
 
-		for(int i = 0; i < platformCount; ++i) {
-			bool intersect = false;
-			Vector2 a, b, c, d, p;
-			Rectangle *platform = platforms+i;
+		// right face
+		p = (Vector2){0};
+		c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
 
-			p = (Vector2){0};
-			a = (Vector2){ player->pos.x, player->pos.y };
-			b = (Vector2){ newpos.x     , newpos.y      };
+		v = Vector2Subtract(d, c);
+		f = Vector2DotProduct(player->vel, v);
 
-			// top face
-			c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
-			intersect = lineSegIntersect(a, b, c, d, &p);
+		if(f == 0.0f)
+			intersect &= !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y);
 
-			if(intersect && player->vel.y >= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.y = 0.0;
-				newpos.y = p.y;
-				player->thrust = PLAYER_THRUST_TIME;
-				player->airborne = false;
-			}
+		if(intersect && player->vel.x <= 0) {
+			*(unsigned int*)&player->vel.x = 0x80000000;
+			newpos.x = p.x;
+			continue;
+		}
 
-			// bottom face
-			p = (Vector2){0};
-			c = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
-			d = (Vector2){ platform->x + platform->width + player->widthH, platform->y + platform->height + player->heightH };
+		// left face
+		p = (Vector2){0};
+		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
+		d = (Vector2){ platform->x - player->widthH, platform->y + platform->height + player->heightH };
 
-			intersect = lineSegIntersect(a, b, c, d, &p);
+		v = Vector2Subtract(d, c);
+		f = Vector2DotProduct(player->vel, v);
 
-			if(intersect && player->vel.y <= 0 && !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y)) {
-				player->vel.y = 0.0;
-				newpos.y = p.y;
-			}
+		intersect = lineSegIntersect(a, b, c, d, &p);
+
+		if(f == 0.0f)
+			intersect &= !(p.x == c.x && p.y == c.y) && !(p.x == d.x && p.y == d.y);
+		debugIntersectPoint = p;
+
+		if(intersect && player->vel.x >= 0) {
+			player->vel.x = 0.0;
+			newpos.x = p.x;
+			continue;
 		}
 	}
 
 	if(player->airborne && player->thrust == PLAYER_THRUST_TIME)
 		player->thrust = 0;
 
-	if(Vector2LengthSqr(player->vel) >= SQUARE(7000)) {
+	if(Vector2LengthSqr(player->vel) >= SQR(7000)) {
 		newpos.x = PLAYER_INITIAL_X;
 		newpos.y = GROUNDLEVEL-player->heightH;
 	}
