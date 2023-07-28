@@ -278,8 +278,8 @@ void playerUpdate(PlayerState *player, float timestep) {
 
 	for(int i = 0; i < platformCount; ++i) {
 		bool intersect;
-		bool ignorecorner;
-		Vector2 a, b, c, d, p, v;
+		bool ignorecorner = (player->vel.x == 0.0f || player->vel.y == 0.0f);
+		Vector2 a, b, c, d, p;
 		Rectangle *platform = platforms+indexes[i];
 
 		a = (Vector2){ player->pos.x, player->pos.y };
@@ -289,8 +289,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 		p = (Vector2){0};
 		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
 		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
-		v = Vector2Subtract(d, c);
-		ignorecorner = (Vector2DotProduct(player->vel, v) == 0.0f);
 
 		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
 
@@ -306,8 +304,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 		p = (Vector2){0};
 		c.y = platform->y + platform->height + player->heightH;
 		d.y = platform->y + platform->height + player->heightH;
-		v = Vector2Subtract(d, c);
-		ignorecorner = (Vector2DotProduct(player->vel, v) == 0.0f);
 
 		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
 
@@ -321,8 +317,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 		p = (Vector2){0};
 		c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
 		d.x = platform->x + platform->width + player->widthH;
-		v = Vector2Subtract(d, c);
-		ignorecorner = (Vector2DotProduct(player->vel, v) == 0.0f);
 
 		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
 
@@ -336,8 +330,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 		p = (Vector2){0};
 		c.x = platform->x - player->widthH;
 		d.x = platform->x - player->widthH;
-		v = Vector2Subtract(d, c);
-		ignorecorner = (Vector2DotProduct(player->vel, v) == 0.0f);
 
 		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
 
