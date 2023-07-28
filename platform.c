@@ -37,6 +37,7 @@ const float MAX_DEPTH = 1200.0;
 const int PLAYER_FRAME_SPEED = 30;
 const float FPS = 60;
 const int TILE_SIZE = 20; // tiles will be 20x20 pixels
+const float PLANCK_LENGTH = 0.0001f;
 
 const char *WORLD =
 "\
@@ -155,7 +156,7 @@ Rectangle platforms[8];
 const int platformCount = ARRLEN(platforms);
 bool gameOver = false;
 
-inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p, bool ignorecorner) {
+inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
 	float t, u;
 	float numerator, denominator;
 
@@ -179,7 +180,7 @@ inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vec
 
 	*p = (Vector2){ p1.x + t*(p2.x - p1.x), p1.y + t*(p2.y - p1.y) };
 
-	return (0.0 <= t && t <= 1.0) && ((0.0 < u && u < 1.0 && ignorecorner)||(0.0 <= u && u <= 1.0 && !ignorecorner));
+	return (0.0 <= t && t <= 1.0) && (0.0 <= u && u <= 1.0);
 }
 
 void playerUpdate(PlayerState *player, float timestep) {
@@ -278,7 +279,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 
 	for(int i = 0; i < platformCount; ++i) {
 		bool intersect;
-		bool ignorecorner = (player->vel.x == 0.0f || player->vel.y == 0.0f);
 		Vector2 a, b, c, d, p;
 		Rectangle *platform = platforms+indexes[i];
 
@@ -290,11 +290,11 @@ void playerUpdate(PlayerState *player, float timestep) {
 		c = (Vector2){ platform->x - player->widthH, platform->y - player->heightH };
 		d = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
 
-		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.y >= 0) {
 			player->vel.y = 0.0;
-			newpos.y = p.y;
+			newpos.y = p.y - PLANCK_LENGTH;
 			player->thrust = PLAYER_THRUST_TIME;
 			player->airborne = false;
 			continue;
@@ -305,11 +305,11 @@ void playerUpdate(PlayerState *player, float timestep) {
 		c.y = platform->y + platform->height + player->heightH;
 		d.y = platform->y + platform->height + player->heightH;
 
-		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.y < 0) {
 			player->vel.y = 0.0;
-			newpos.y = p.y;
+			newpos.y = p.y + PLANCK_LENGTH;
 			continue;
 		}
 
@@ -318,11 +318,11 @@ void playerUpdate(PlayerState *player, float timestep) {
 		c = (Vector2){ platform->x + platform->width + player->widthH, platform->y - player->heightH };
 		d.x = platform->x + platform->width + player->widthH;
 
-		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.x <= 0) {
 			*(unsigned int*)&player->vel.x = 0x80000000;
-			newpos.x = p.x;
+			newpos.x = p.x + PLANCK_LENGTH;
 			continue;
 		}
 
@@ -331,11 +331,11 @@ void playerUpdate(PlayerState *player, float timestep) {
 		c.x = platform->x - player->widthH;
 		d.x = platform->x - player->widthH;
 
-		intersect = lineSegIntersect(a, b, c, d, &p, ignorecorner);
+		intersect = lineSegIntersect(a, b, c, d, &p);
 
 		if(intersect && player->vel.x >= 0) {
 			player->vel.x = 0.0;
-			newpos.x = p.x;
+			newpos.x = p.x - PLANCK_LENGTH;
 			continue;
 		}
 	}
