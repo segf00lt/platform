@@ -4,5 +4,7 @@ LDFLAGS = -lraylib -lm
 
 all:
 	$(CC) $(CFLAGS) $(LDFLAGS) platform.c -o platform
+debug:
+	$(CC) -DDEBUG $(CFLAGS) $(LDFLAGS) platform.c -o platform
 
 .PHONY: all

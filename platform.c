@@ -23,13 +23,15 @@
 
 const int screenWidth = 1200;
 const int screenHeight = 900;
-const float friction = 9.20;
-const float drag = 1.20;
+const float friction = 5.20;
+const float drag = 4.20;
 const float GROUNDLEVEL = screenHeight - 210;
 const float G = 9500.0;
 const float PLAYER_INITIAL_X = 100.0;
-const float PLAYER_MOVE_FORCE = 1.5e5;
-const float PLAYER_JUMP_FORCE = -1e6;
+const float PLAYER_RUN_FORCE = 1.5e5;
+const float PLAYER_JUMP_FORCE = 1e6;
+const float PLAYER_AIR_RUN_FORCE = 0.8e5;
+const float PLAYER_WALL_JUMP_FORCE = 0.5e6;
 const float PLAYER_MASS = 27;
 const float PLAYER_INVMASS = 1/PLAYER_MASS;
 const int PLAYER_THRUST_TIME = 5;
@@ -135,6 +137,7 @@ struct PlayerState {
 	Vector2 vel;
 	Vector2 accel;
 	Vector2 force;
+	Vector2 normal;
 	Texture2D tex[3];
 	Rectangle frame;
 	int curFrame;
@@ -144,13 +147,17 @@ struct PlayerState {
 	float heightH; // half of the height
 	float mass;
 	float invmass;
+	float runForce; // smaller when airborne
+	float jumpForce; // smaller when sliding down a wall
 	int moveState;
 	bool airborne;
 	int thrust;
 };
 
+#ifdef DEBUG
 Vector2 debugDirection;
 int debugclosestrectindex[2];
+#endif
 
 Rectangle platforms[8];
 const int platformCount = ARRLEN(platforms);
@@ -186,22 +193,24 @@ inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vec
 void playerUpdate(PlayerState *player, float timestep) {
 	player->force.y = G * player->mass;
 
-	if(IsKeyDown(KEY_UP) && player->thrust > 0) {
-		player->force.y += PLAYER_JUMP_FORCE;
-		--player->thrust;
-	} else {
-		player->thrust = 0;
-	}
-
 	if(IsKeyDown(KEY_LEFT)) {
-		player->force.x = -PLAYER_MOVE_FORCE;
+		player->force.x = -player->runForce;
 		player->moveState = 1;
 	} else if(IsKeyDown(KEY_RIGHT)) {
-		player->force.x = PLAYER_MOVE_FORCE;
+		player->force.x = player->runForce;
 		player->moveState = 1;
 	} else {
 		player->force.x = 0;
 		player->moveState = 0;
+	}
+
+	if(IsKeyDown(KEY_UP) && player->thrust > 0 && player->normal.y <= 0) {
+		if(player->airborne && player->normal.x != 0.0f)
+			player->force.x = player->normal.x * player->jumpForce * 5;
+		player->force.y += -player->jumpForce;
+		--player->thrust;
+	} else {
+		player->thrust = 0;
 	}
 
 	player->accel = Vector2Scale(player->force, player->invmass);
@@ -213,14 +222,19 @@ void playerUpdate(PlayerState *player, float timestep) {
 	 */
 
 	Vector2 accel = Vector2Scale(player->accel, timestep);
-	float velx = player->vel.x + accel.x - timestep*friction*player->vel.x;
+	float velx = player->vel.x + accel.x - timestep*drag*player->vel.x;
+	velx -= fabsf(player->normal.y)*timestep*friction*player->vel.x;
 	if(velx != 0.0f)
 		player->vel.x = velx;
+	if(player->vel.y > 0)
+		player->vel.y -= fabsf(player->normal.x)*timestep*(80.0f)*player->vel.y;
 	player->vel.y += accel.y - timestep*drag*player->vel.y;
 	accel = Vector2Scale(accel, HALF(timestep));
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
-	debugDirection = offset;
 	Vector2 newpos = Vector2Add(player->pos, offset);
+#ifdef DEBUG
+	debugDirection = offset;
+#endif
 
 	if(player->airborne)
 		player->moveState = 2;
@@ -245,6 +259,7 @@ void playerUpdate(PlayerState *player, float timestep) {
 	/* inelastic collisions */
 
 	player->airborne = true;
+	player->normal = (Vector2){0};
 
 	int indexes[platformCount];
 	float distances[platformCount];
@@ -274,8 +289,10 @@ void playerUpdate(PlayerState *player, float timestep) {
 		}
 	}
 
+#ifdef DEBUG
 	debugclosestrectindex[0] = indexes[0];
 	debugclosestrectindex[1] = indexes[1];
+#endif
 
 	for(int i = 0; i < platformCount; ++i) {
 		bool intersect;
@@ -297,6 +314,9 @@ void playerUpdate(PlayerState *player, float timestep) {
 			newpos.y = p.y - PLANCK_LENGTH;
 			player->thrust = PLAYER_THRUST_TIME;
 			player->airborne = false;
+			player->normal.y = -1;
+			player->runForce = PLAYER_RUN_FORCE;
+			player->jumpForce = PLAYER_JUMP_FORCE;
 			continue;
 		}
 
@@ -310,6 +330,7 @@ void playerUpdate(PlayerState *player, float timestep) {
 		if(intersect && player->vel.y < 0) {
 			player->vel.y = 0.0;
 			newpos.y = p.y + PLANCK_LENGTH;
+			player->normal.y = 1;
 			continue;
 		}
 
@@ -323,6 +344,9 @@ void playerUpdate(PlayerState *player, float timestep) {
 		if(intersect && player->vel.x <= 0) {
 			*(unsigned int*)&player->vel.x = 0x80000000;
 			newpos.x = p.x + PLANCK_LENGTH;
+			player->normal.x = 1;
+			player->thrust = PLAYER_THRUST_TIME;
+			player->jumpForce = PLAYER_WALL_JUMP_FORCE;
 			continue;
 		}
 
@@ -336,14 +360,20 @@ void playerUpdate(PlayerState *player, float timestep) {
 		if(intersect && player->vel.x >= 0) {
 			player->vel.x = 0.0;
 			newpos.x = p.x - PLANCK_LENGTH;
+			player->normal.x = -1;
+			player->thrust = PLAYER_THRUST_TIME;
+			player->jumpForce = PLAYER_WALL_JUMP_FORCE;
 			continue;
 		}
 	}
 
-	if(player->airborne && player->thrust == PLAYER_THRUST_TIME)
+	if(player->normal.x == 0 && player->normal.y == 0)
+		player->runForce = PLAYER_AIR_RUN_FORCE;
+
+	if(player->airborne && player->force.y >= 0 && player->normal.x == 0 && player->normal.y == 0)
 		player->thrust = 0;
 
-	if(Vector2LengthSqr(player->vel) >= SQR(7000)) {
+	if(newpos.y == GROUNDLEVEL+1000) {
 		newpos.x = PLAYER_INITIAL_X;
 		newpos.y = GROUNDLEVEL-player->heightH;
 	}
@@ -363,11 +393,14 @@ int main(void) {
 		.pos = { .x = PLAYER_INITIAL_X, },
 		.force = { .x = 0, .y = 30 * G },
 		.accel = { .x = 0 , .y = G },
+		.normal = { .x = 0, .y = -1 },
 		.frameCounter = 0,
 		.curFrame = 0,
 		.frameSpeed = PLAYER_FRAME_SPEED,
 		.mass = PLAYER_MASS,
 		.invmass = PLAYER_INVMASS,
+		.runForce = PLAYER_RUN_FORCE,
+		.jumpForce = PLAYER_JUMP_FORCE,
 		.thrust = PLAYER_THRUST_TIME,
 	};
 
@@ -446,8 +479,10 @@ int main(void) {
 				DrawRectangleRec(*platform, color);
 				++c;
 			}
+#ifdef DEBUG
 			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH, DOUBLE(mario.widthH), DOUBLE(mario.heightH)};
 			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
+#endif
 			Vector2 framepos = (Vector2){
 				mario.pos.x - mario.frame.width*0.5,
 				mario.pos.y - mario.frame.height*0.5,
@@ -456,11 +491,13 @@ int main(void) {
 			if(*(int*)&mario.vel.x < 0)
 				frame.width *= -1;
 			DrawTextureRec(mario.tex[mario.moveState], frame, framepos, WHITE);
+#ifdef DEBUG
 			Vector2 a, b;
 			a = mario.pos;
 			b = Vector2Add(mario.pos, debugDirection);
 			DrawLineEx(a, b, 2.0, YELLOW);
-			//DrawLineEx(collisionSurface[0], collisionSurface[1], 2.0, WHITE);
+			b = Vector2Add(mario.pos, Vector2Scale(mario.normal, 30));
+			DrawLineEx(a, b, 2.0, PINK);
 			Vector2 closesest = (Vector2){
 				platforms[debugclosestrectindex[0]].x + HALF(platforms[debugclosestrectindex[0]].width),
 				platforms[debugclosestrectindex[0]].y + HALF(platforms[debugclosestrectindex[0]].height),
@@ -471,6 +508,7 @@ int main(void) {
 				platforms[debugclosestrectindex[1]].y + HALF(platforms[debugclosestrectindex[1]].height),
 			};
 			DrawLineEx(mario.pos, closesest, 2.0, PURPLE);
+#endif
 		}
 		EndMode2D();
 
@@ -484,12 +522,6 @@ int main(void) {
 		mario.accel.x, mario.accel.y,
 		mario.vel.x, mario.vel.y);
 
-		//a = (Vector2){ 0, HALF(screenHeight) };
-		//b = (Vector2){ screenWidth, HALF(screenHeight) };
-		//DrawLineV(a, b, YELLOW);
-		//a = (Vector2){ HALF(screenWidth), 0 };
-		//b = (Vector2){ HALF(screenWidth), screenHeight };
-		//DrawLineV(a, b, YELLOW);
 		DrawText(buf, 10, 10, 15, RAYWHITE);
 
 		EndDrawing();
