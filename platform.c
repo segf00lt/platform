@@ -159,8 +159,9 @@ Vector2 debugDirection;
 int debugclosestrectindex[2];
 #endif
 
-Rectangle platforms[8];
+Rectangle platforms[6];
 const int platformCount = ARRLEN(platforms);
+//const int platformCount = 0;
 bool gameOver = false;
 
 inline bool lineSegIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, Vector2 *p) {
@@ -373,10 +374,18 @@ void playerUpdate(PlayerState *player, float timestep) {
 	if(player->airborne && player->force.y >= 0 && player->normal.x == 0 && player->normal.y == 0)
 		player->thrust = 0;
 
-	if(newpos.y == GROUNDLEVEL+1000) {
-		newpos.x = PLAYER_INITIAL_X;
+	if(newpos.y >= GROUNDLEVEL-player->heightH) {
 		newpos.y = GROUNDLEVEL-player->heightH;
+		player->vel.y = 0.0;
+		player->thrust = PLAYER_THRUST_TIME;
+		player->airborne = false;
+		player->normal.y = -1;
+		player->runForce = PLAYER_RUN_FORCE;
+		player->jumpForce = PLAYER_JUMP_FORCE;
 	}
+
+	if(newpos.x <= player->widthH)
+		newpos.x = player->widthH;
 
 	player->pos = newpos;
 }
@@ -404,49 +413,50 @@ int main(void) {
 		.thrust = PLAYER_THRUST_TIME,
 	};
 
-	platforms[0] = (Rectangle){
-		.x = 0, .y = GROUNDLEVEL,
-		.width = screenWidth*7000, .height = screenHeight-GROUNDLEVEL,
-	};
+	//platforms[0] = (Rectangle){
+	//	.x = 0, .y = GROUNDLEVEL,
+	//	.width = screenWidth*7000, .height = screenHeight-GROUNDLEVEL,
+	//};
 
-	platforms[1] = (Rectangle){
+	platforms[0] = (Rectangle){
 		.x = 300, .y = GROUNDLEVEL-190,
 		.width = 400, .height = 40,
 	};
 
-	platforms[2] = (Rectangle){
+	platforms[1] = (Rectangle){
 		.x = 1000, .y = GROUNDLEVEL-120,
 		.width = 400, .height = 40,
 	};
 
-	platforms[3] = (Rectangle){
+	platforms[2] = (Rectangle){
 		.x = 460, .y = GROUNDLEVEL-300,
 		.width = 200, .height = 30,
 	};
 
-	platforms[4] = (Rectangle){
+	platforms[3] = (Rectangle){
 		.x = 660, .y = GROUNDLEVEL-300,
 		.width = 200, .height = 30,
 	};
 
-	platforms[5] = (Rectangle){
+	platforms[4] = (Rectangle){
 		.x = 600, .y = GROUNDLEVEL- 100,
 		.width = 50, .height = 100,
 	};
 
-	platforms[6] = (Rectangle){
-		.x = 1800, .y = GROUNDLEVEL-200,
-		.width = 80, .height = 200,
-	};
+	//platforms[5] = (Rectangle){
+	//	.x = 1800, .y = GROUNDLEVEL-200,
+	//	.width = 80, .height = 200,
+	//};
 
-	platforms[7] = (Rectangle){
+	platforms[5] = (Rectangle){
 		.x = 1800, .y = GROUNDLEVEL-400,
 		.width = 80, .height = 200,
 	};
 
-	mario.tex[0] = LoadTexture("mario_still_scaled.png");
-	mario.tex[1] = LoadTexture("mario_anim_scaled.png");
-	mario.tex[2] = LoadTexture("mario_jump_scaled.png");
+	mario.tex[0] = LoadTexture("assets/mario_still_scaled.png");
+	mario.tex[1] = LoadTexture("assets/mario_anim_scaled.png");
+	mario.tex[2] = LoadTexture("assets/mario_jump_scaled.png");
+	Texture2D groundTex = LoadTexture("assets/groundtile48x48.png");
 	mario.frame.x = mario.frame.y = 0;
 	mario.frame.width = mario.tex[0].width - 10;
 	mario.frame.height = mario.tex[0].height;
@@ -455,27 +465,39 @@ int main(void) {
 	assert(mario.heightH == 24);
 	mario.pos.y = GROUNDLEVEL-mario.heightH;
 	Camera2D camera = {0};
+	camera.target.y = GROUNDLEVEL-mario.heightH-100;
 	camera.rotation = 0.0f;
-	camera.zoom = 1.5f;
+	camera.zoom = 1.3f;
+	Rectangle groundRect = (Rectangle){
+		.width = DOUBLE(screenWidth), .height = 250,
+	};
+	Vector2 groundPos = (Vector2){
+		.x = 0, .y = GROUNDLEVEL,
+	};
 
 	while(!WindowShouldClose()) {
 
 		BeginDrawing();
 
-		ClearBackground(BLACK);
+		ClearBackground(SKYBLUE);
 
 		float timestep = GetFrameTime();
+		float dx = -mario.pos.x;
 		playerUpdate(&mario, timestep);
+		dx += mario.pos.x;
 		camera.offset = (Vector2){ HALF(screenWidth), HALF(screenHeight) };
-		camera.target = (Vector2){ mario.pos.x, mario.pos.y };
-
+		if(mario.pos.x < HALF(screenWidth)-148) {
+			camera.target.x = HALF(screenWidth)-148;
+		} else
+			camera.target.x = mario.pos.x;
+		groundRect.x = camera.target.x - HALF(screenWidth);
 
 		BeginMode2D(camera);
 		{
 			int c = 0;
 			for(Rectangle *platform = platforms; platform-platforms < platformCount; ++platform) {
 				Color color = RED;
-				if(c & 0x1) color = BLUE;
+				if(c & 0x1) color = ORANGE;
 				DrawRectangleRec(*platform, color);
 				++c;
 			}
@@ -491,6 +513,8 @@ int main(void) {
 			if(*(int*)&mario.vel.x < 0)
 				frame.width *= -1;
 			DrawTextureRec(mario.tex[mario.moveState], frame, framepos, WHITE);
+			groundPos.x = camera.target.x - HALF(screenWidth);
+			DrawTextureRec(groundTex, groundRect, groundPos, WHITE);
 #ifdef DEBUG
 			Vector2 a, b;
 			a = mario.pos;
@@ -498,19 +522,25 @@ int main(void) {
 			DrawLineEx(a, b, 2.0, YELLOW);
 			b = Vector2Add(mario.pos, Vector2Scale(mario.normal, 30));
 			DrawLineEx(a, b, 2.0, PINK);
-			Vector2 closesest = (Vector2){
-				platforms[debugclosestrectindex[0]].x + HALF(platforms[debugclosestrectindex[0]].width),
-				platforms[debugclosestrectindex[0]].y + HALF(platforms[debugclosestrectindex[0]].height),
-			};
-			DrawLineEx(mario.pos, closesest, 2.0, ORANGE);
-			closesest = (Vector2){
-				platforms[debugclosestrectindex[1]].x + HALF(platforms[debugclosestrectindex[1]].width),
-				platforms[debugclosestrectindex[1]].y + HALF(platforms[debugclosestrectindex[1]].height),
-			};
-			DrawLineEx(mario.pos, closesest, 2.0, PURPLE);
+			DrawLineEx((Vector2){0,0},(Vector2){0,3000}, 2.0, GREEN);
+			//Vector2 closesest = (Vector2){
+			//	platforms[debugclosestrectindex[0]].x + HALF(platforms[debugclosestrectindex[0]].width),
+			//	platforms[debugclosestrectindex[0]].y + HALF(platforms[debugclosestrectindex[0]].height),
+			//};
+			//DrawLineEx(mario.pos, closesest, 2.0, ORANGE);
+			//closesest = (Vector2){
+			//	platforms[debugclosestrectindex[1]].x + HALF(platforms[debugclosestrectindex[1]].width),
+			//	platforms[debugclosestrectindex[1]].y + HALF(platforms[debugclosestrectindex[1]].height),
+			//};
+			//DrawLineEx(mario.pos, closesest, 2.0, PURPLE);
 #endif
 		}
 		EndMode2D();
+
+#ifdef DEBUG
+		DrawLineEx((Vector2){HALF(screenWidth),0},(Vector2){HALF(screenWidth),screenHeight},2.0,YELLOW);
+		DrawLineEx((Vector2){0,HALF(screenHeight)},(Vector2){screenWidth,HALF(screenHeight)},2.0,YELLOW);
+#endif
 
 		float FPS = GetFPS();
 		char *fmt =
@@ -530,6 +560,7 @@ int main(void) {
 	UnloadTexture(mario.tex[0]);
 	UnloadTexture(mario.tex[1]);
 	UnloadTexture(mario.tex[2]);
+	UnloadTexture(groundTex);
 
 	CloseWindow();
 

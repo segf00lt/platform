@@ -1,0 +1,18 @@
+INCLUDED
+- Player (16x16)
+- Enemy (16x16)
+- World Assets (16x16)
+- BG Parallax
+- UI (16x16)
+
+ANIMATIONS
+- Player: Spawn/Idle/Walk/Fall/Attack/Fall Attack/Crouch/Death
+- Enemy: Walk
+
+PNG image format. Original size.
+
+LICENCE: This asset pack can be used in both free and commercial projects. You can modify it to suit your own needs. You may not redistribute or resell it.
+
+If you come across issues or need help, please contact me. Thanks! :)
+
+https://trevor-pupkin.itch.io/
