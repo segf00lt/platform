@@ -23,7 +23,8 @@
 
 const int screenWidth = 1200;
 const int screenHeight = 900;
-const float friction = 5.20;
+const float frictionX = 5.20;
+const float frictionY = 80.0;
 const float drag = 4.20;
 const float GROUNDLEVEL = screenHeight - 210;
 const float G = 9500.0;
@@ -31,6 +32,7 @@ const float PLAYER_INITIAL_X = 100.0;
 const float PLAYER_RUN_FORCE = 1.5e5;
 const float PLAYER_JUMP_FORCE = 1e6;
 const float PLAYER_AIR_RUN_FORCE = 0.8e5;
+const float PLAYER_WALL_RUN_FORCE = 1.8e6;
 const float PLAYER_WALL_JUMP_FORCE = 0.5e6;
 const float PLAYER_MASS = 27;
 const float PLAYER_INVMASS = 1/PLAYER_MASS;
@@ -151,6 +153,7 @@ struct PlayerState {
 	float jumpForce; // smaller when sliding down a wall
 	int moveState;
 	bool airborne;
+	bool wallclimb;
 	int thrust;
 };
 
@@ -205,9 +208,18 @@ void playerUpdate(PlayerState *player, float timestep) {
 		player->moveState = 0;
 	}
 
+	bool issliding = false;
+	if((IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) && player->normal.x != 0.0f && player->airborne) {
+		player->normal.y = -1;
+		player->thrust = PLAYER_THRUST_TIME;
+		player->jumpForce = PLAYER_WALL_JUMP_FORCE;
+		player->runForce = PLAYER_WALL_RUN_FORCE;
+		issliding = true;
+	}
+
 	if(IsKeyDown(KEY_UP) && player->thrust > 0 && player->normal.y <= 0) {
-		if(player->airborne && player->normal.x != 0.0f)
-			player->force.x = player->normal.x * player->jumpForce * 5;
+		if(issliding)
+			player->force.x += player->normal.x * player->runForce;
 		player->force.y += -player->jumpForce;
 		--player->thrust;
 	} else {
@@ -224,11 +236,11 @@ void playerUpdate(PlayerState *player, float timestep) {
 
 	Vector2 accel = Vector2Scale(player->accel, timestep);
 	float velx = player->vel.x + accel.x - timestep*drag*player->vel.x;
-	velx -= fabsf(player->normal.y)*timestep*friction*player->vel.x;
+	velx -= fabsf(player->normal.y)*timestep*frictionX*player->vel.x;
 	if(velx != 0.0f)
 		player->vel.x = velx;
 	if(player->vel.y > 0)
-		player->vel.y -= fabsf(player->normal.x)*timestep*(80.0f)*player->vel.y;
+		player->vel.y -= fabsf(player->normal.y)*timestep*frictionY*player->vel.y;
 	player->vel.y += accel.y - timestep*drag*player->vel.y;
 	accel = Vector2Scale(accel, HALF(timestep));
 	Vector2 offset = Vector2Add(accel, Vector2Scale(player->vel, timestep));
@@ -346,8 +358,6 @@ void playerUpdate(PlayerState *player, float timestep) {
 			*(unsigned int*)&player->vel.x = 0x80000000;
 			newpos.x = p.x + PLANCK_LENGTH;
 			player->normal.x = 1;
-			player->thrust = PLAYER_THRUST_TIME;
-			player->jumpForce = PLAYER_WALL_JUMP_FORCE;
 			continue;
 		}
 
@@ -362,14 +372,14 @@ void playerUpdate(PlayerState *player, float timestep) {
 			player->vel.x = 0.0;
 			newpos.x = p.x - PLANCK_LENGTH;
 			player->normal.x = -1;
-			player->thrust = PLAYER_THRUST_TIME;
-			player->jumpForce = PLAYER_WALL_JUMP_FORCE;
 			continue;
 		}
 	}
 
 	if(player->normal.x == 0 && player->normal.y == 0)
 		player->runForce = PLAYER_AIR_RUN_FORCE;
+	else
+		player->runForce = PLAYER_RUN_FORCE;
 
 	if(player->airborne && player->force.y >= 0 && player->normal.x == 0 && player->normal.y == 0)
 		player->thrust = 0;
@@ -396,7 +406,7 @@ int main(void) {
 	InitWindow(screenWidth, screenHeight, "platform");
 	SetTargetFPS(FPS);
 
-	PlayerState mario = {
+	PlayerState player = {
 		//.width = PLAYER_BOX_WIDTH, .height = PLAYER_BOX_HEIGHT,
 		.vel = {0},
 		.pos = { .x = PLAYER_INITIAL_X, },
@@ -453,19 +463,19 @@ int main(void) {
 		.width = 80, .height = 200,
 	};
 
-	mario.tex[0] = LoadTexture("assets/mario_still_scaled.png");
-	mario.tex[1] = LoadTexture("assets/mario_anim_scaled.png");
-	mario.tex[2] = LoadTexture("assets/mario_jump_scaled.png");
+	player.tex[0] = LoadTexture("assets/mario_still_scaled.png");
+	player.tex[1] = LoadTexture("assets/mario_anim_scaled.png");
+	player.tex[2] = LoadTexture("assets/mario_jump_scaled.png");
 	Texture2D groundTex = LoadTexture("assets/groundtile48x48.png");
-	mario.frame.x = mario.frame.y = 0;
-	mario.frame.width = mario.tex[0].width - 10;
-	mario.frame.height = mario.tex[0].height;
-	mario.widthH = mario.frame.width * 0.5;
-	mario.heightH = mario.frame.height * 0.5;
-	assert(mario.heightH == 24);
-	mario.pos.y = GROUNDLEVEL-mario.heightH;
+	player.frame.x = player.frame.y = 0;
+	player.frame.width = player.tex[0].width - 10;
+	player.frame.height = player.tex[0].height;
+	player.widthH = player.frame.width * 0.5;
+	player.heightH = player.frame.height * 0.5;
+	assert(player.heightH == 24);
+	player.pos.y = GROUNDLEVEL-player.heightH;
 	Camera2D camera = {0};
-	camera.target.y = GROUNDLEVEL-mario.heightH-100;
+	camera.target.y = GROUNDLEVEL-player.heightH-100;
 	camera.rotation = 0.0f;
 	camera.zoom = 1.3f;
 	Rectangle groundRect = (Rectangle){
@@ -482,14 +492,14 @@ int main(void) {
 		ClearBackground(SKYBLUE);
 
 		float timestep = GetFrameTime();
-		float dx = -mario.pos.x;
-		playerUpdate(&mario, timestep);
-		dx += mario.pos.x;
+		float dx = -player.pos.x;
+		playerUpdate(&player, timestep);
+		dx += player.pos.x;
 		camera.offset = (Vector2){ HALF(screenWidth), HALF(screenHeight) };
-		if(mario.pos.x < HALF(screenWidth)-148) {
+		if(player.pos.x < HALF(screenWidth)-148) {
 			camera.target.x = HALF(screenWidth)-148;
 		} else
-			camera.target.x = mario.pos.x;
+			camera.target.x = player.pos.x;
 		groundRect.x = camera.target.x - HALF(screenWidth);
 
 		BeginMode2D(camera);
@@ -502,64 +512,65 @@ int main(void) {
 				++c;
 			}
 #ifdef DEBUG
-			Rectangle playerRect = (Rectangle){ mario.pos.x - mario.widthH, mario.pos.y - mario.heightH, DOUBLE(mario.widthH), DOUBLE(mario.heightH)};
+			Rectangle playerRect = (Rectangle){ player.pos.x - player.widthH, player.pos.y - player.heightH, DOUBLE(player.widthH), DOUBLE(player.heightH)};
 			DrawRectangleLinesEx(playerRect, 2.0, GREEN);
 #endif
 			Vector2 framepos = (Vector2){
-				mario.pos.x - mario.frame.width*0.5,
-				mario.pos.y - mario.frame.height*0.5,
+				player.pos.x - player.frame.width*0.5,
+				player.pos.y - player.frame.height*0.5,
 			};
-			Rectangle frame = mario.frame;
-			if(*(int*)&mario.vel.x < 0)
+			Rectangle frame = player.frame;
+			if(*(int*)&player.vel.x < 0)
 				frame.width *= -1;
-			DrawTextureRec(mario.tex[mario.moveState], frame, framepos, WHITE);
+			DrawTextureRec(player.tex[player.moveState], frame, framepos, WHITE);
 			groundPos.x = camera.target.x - HALF(screenWidth);
 			DrawTextureRec(groundTex, groundRect, groundPos, WHITE);
 #ifdef DEBUG
 			Vector2 a, b;
-			a = mario.pos;
-			b = Vector2Add(mario.pos, debugDirection);
+			a = player.pos;
+			b = Vector2Add(player.pos, debugDirection);
 			DrawLineEx(a, b, 2.0, YELLOW);
-			b = Vector2Add(mario.pos, Vector2Scale(mario.normal, 30));
+			b = Vector2Add(player.pos, Vector2Scale(player.normal, 30));
 			DrawLineEx(a, b, 2.0, PINK);
 			DrawLineEx((Vector2){0,0},(Vector2){0,3000}, 2.0, GREEN);
 			//Vector2 closesest = (Vector2){
 			//	platforms[debugclosestrectindex[0]].x + HALF(platforms[debugclosestrectindex[0]].width),
 			//	platforms[debugclosestrectindex[0]].y + HALF(platforms[debugclosestrectindex[0]].height),
 			//};
-			//DrawLineEx(mario.pos, closesest, 2.0, ORANGE);
+			//DrawLineEx(player.pos, closesest, 2.0, ORANGE);
 			//closesest = (Vector2){
 			//	platforms[debugclosestrectindex[1]].x + HALF(platforms[debugclosestrectindex[1]].width),
 			//	platforms[debugclosestrectindex[1]].y + HALF(platforms[debugclosestrectindex[1]].height),
 			//};
-			//DrawLineEx(mario.pos, closesest, 2.0, PURPLE);
+			//DrawLineEx(player.pos, closesest, 2.0, PURPLE);
 #endif
 		}
 		EndMode2D();
 
 #ifdef DEBUG
-		DrawLineEx((Vector2){HALF(screenWidth),0},(Vector2){HALF(screenWidth),screenHeight},2.0,YELLOW);
-		DrawLineEx((Vector2){0,HALF(screenHeight)},(Vector2){screenWidth,HALF(screenHeight)},2.0,YELLOW);
+		//DrawLineEx((Vector2){HALF(screenWidth),0},(Vector2){HALF(screenWidth),screenHeight},2.0,YELLOW);
+		//DrawLineEx((Vector2){0,HALF(screenHeight)},(Vector2){screenWidth,HALF(screenHeight)},2.0,YELLOW);
 #endif
 
 		float FPS = GetFPS();
 		char *fmt =
-		"FPS: %f\nTIME: %f\nTHRUST: %i\nAIRBORNE: %i\nPX: %f\nPY: %f\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\n";
+		"FPS: %f\nTIME: %f\nTHRUST: %i\nAIRBORNE: %i\nPX: %f\nPY: %f\nFX: %f\nFY: %f\nAX: %f\nAY: %f\nVX: %f\nVY: %f\nRUNFORCE: %f\n";
 		sprintf(buf, fmt,
-		FPS, timestep, mario.thrust, mario.airborne,
-		mario.pos.x, mario.pos.y,
-		mario.force.x, mario.force.y,
-		mario.accel.x, mario.accel.y,
-		mario.vel.x, mario.vel.y);
+		FPS, timestep, player.thrust, player.airborne,
+		player.pos.x, player.pos.y,
+		player.force.x, player.force.y,
+		player.accel.x, player.accel.y,
+		player.vel.x, player.vel.y,
+		player.runForce);
 
 		DrawText(buf, 10, 10, 15, RAYWHITE);
 
 		EndDrawing();
 	}
 
-	UnloadTexture(mario.tex[0]);
-	UnloadTexture(mario.tex[1]);
-	UnloadTexture(mario.tex[2]);
+	UnloadTexture(player.tex[0]);
+	UnloadTexture(player.tex[1]);
+	UnloadTexture(player.tex[2]);
 	UnloadTexture(groundTex);
 
 	CloseWindow();
